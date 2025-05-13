@@ -169,8 +169,15 @@ export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
   const formData = new FormData();
   formData.append('audio', audioBlob, 'recording.webm');
 
+  // Get the anon key from the supabase client
+  const supabaseKey = supabase.supabaseKey;
+
   const response = await fetch('https://nuvujqidhjnbosfcwahw.supabase.co/functions/v1/transcribe-audio', {
     method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${supabaseKey}`,
+      'apikey': supabaseKey,
+    },
     body: formData,
   });
 
