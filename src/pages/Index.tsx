@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Home, Search, Plus, Menu, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '../components/Header';
@@ -15,13 +15,21 @@ import type { Recipe } from '../types';
 
 const Index: React.FC = () => {
   const navigate = useNavigate();
+  const { category } = useParams<{ category?: string }>();
   const [dietType, setDietType] = useState<'strict' | 'flexible'>('strict');
   const [isGenerating, setIsGenerating] = useState(false);
-  const { getAllRecipes } = useRecipes();
+  const { getAllRecipes, getRecipesByCategory } = useRecipes();
 
+  // Fetch recipes based on category or all recipes
   const { data: recipes, isLoading } = useQuery({
-    queryKey: ['recipes'],
-    queryFn: getAllRecipes,
+    queryKey: ['recipes', category],
+    queryFn: async () => {
+      if (category) {
+        return await getRecipesByCategory(category);
+      } else {
+        return await getAllRecipes();
+      }
+    },
   });
 
   // Check for user authentication
@@ -44,7 +52,7 @@ const Index: React.FC = () => {
       const generatedRecipe = await generateRecipe(ingredients, dietType);
       
       // Store the generated recipe in local storage
-      const generatedRecipes = JSON.parse(localStorage.getItem('generatedRecipe') || 'null') || { 
+      const generatedRecipes = {
         ...generatedRecipe,
         id: `temp-${Date.now()}`
       };
@@ -90,16 +98,23 @@ const Index: React.FC = () => {
         
         {(recipes && recipes.length > 0) ? (
           <RecipeList 
-            title={session ? "Your Recipes" : "Example Recipes"} 
+            title={category ? `${category.charAt(0).toUpperCase() + category.slice(1).replace('-', ' ')} Recipes` : (session ? "Your Recipes" : "Example Recipes")} 
             recipes={recipes} 
           />
-        ) : null}
+        ) : (
+          <div className="mt-12 text-center">
+            <p className="text-carnivore-secondary">No recipes found. Try creating one!</p>
+          </div>
+        )}
       </div>
       
       {/* Fixed bottom navigation */}
       <div className="fixed bottom-0 left-0 right-0 bg-carnivore-card border-t border-carnivore-muted">
         <div className="flex justify-around">
-          <button className="py-4 px-6 text-carnivore-primary flex flex-col items-center">
+          <button 
+            onClick={() => navigate('/')}
+            className={`py-4 px-6 flex flex-col items-center ${!category ? 'text-carnivore-primary' : 'text-carnivore-secondary'}`}
+          >
             <Home className="h-6 w-6" />
             <span className="text-xs mt-1">Home</span>
           </button>
@@ -114,9 +129,12 @@ const Index: React.FC = () => {
             <Plus className="h-6 w-6" />
             <span className="text-xs mt-1">Create</span>
           </button>
-          <button className="py-4 px-6 text-carnivore-secondary flex flex-col items-center">
+          <button 
+            onClick={() => navigate(session ? '/profile' : '/auth')}
+            className="py-4 px-6 text-carnivore-secondary flex flex-col items-center"
+          >
             <Menu className="h-6 w-6" />
-            <span className="text-xs mt-1">Menu</span>
+            <span className="text-xs mt-1">{session ? 'Profile' : 'Login'}</span>
           </button>
         </div>
       </div>

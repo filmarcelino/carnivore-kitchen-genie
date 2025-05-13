@@ -5,26 +5,23 @@ import { toast } from 'sonner';
 import { ArrowLeft } from 'lucide-react';
 import Header from '../components/Header';
 import RecipeForm from '../components/RecipeForm';
+import { useRecipes } from '../hooks/useRecipes';
 import type { Recipe } from '../types';
 
 const CreateRecipe: React.FC = () => {
   const navigate = useNavigate();
+  const { createRecipe } = useRecipes();
 
   const handleSubmit = (recipe: Omit<Recipe, 'id'>) => {
-    // In a real app, we would save the recipe to a database
-    // For now, we'll just mock this and navigate back
-    const newRecipe = {
-      ...recipe,
-      id: `recipe-${Date.now()}`,
-    };
-    
-    // Example of how we would save to local storage
-    const existingRecipes = JSON.parse(localStorage.getItem('carnivoreRecipes') || '[]');
-    const updatedRecipes = [...existingRecipes, newRecipe];
-    localStorage.setItem('carnivoreRecipes', JSON.stringify(updatedRecipes));
-    
-    toast.success('Recipe created successfully!');
-    navigate('/');
+    createRecipe.mutate(recipe, {
+      onSuccess: (newRecipe) => {
+        toast.success('Recipe created successfully!');
+        navigate(`/recipe/${newRecipe.id}`);
+      },
+      onError: (error) => {
+        toast.error(`Failed to create recipe: ${error.message}`);
+      }
+    });
   };
 
   return (
