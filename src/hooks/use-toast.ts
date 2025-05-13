@@ -78,7 +78,7 @@ export const reducer = (state: State, action: Action): State => {
         ...state,
         toasts: [
           ...state.toasts,
-          { ...action.toast, id: genId() },
+          { ...action.toast, id: genId() } as ToasterToast,
         ],
       }
 
