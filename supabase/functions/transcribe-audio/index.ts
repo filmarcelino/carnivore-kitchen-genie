@@ -1,3 +1,4 @@
+
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -19,44 +20,71 @@ serve(async (req) => {
   console.log('Request headers:', Object.fromEntries([...req.headers.entries()]));
   
   try {
-    const formData = await req.formData();
+    // Check if OpenAI API key is configured
+    if (!openAIApiKey) {
+      console.error('OPENAI_API_KEY is not configured');
+      throw new Error('OpenAI API key is not configured in the environment');
+    }
+
+    const formData = await req.formData().catch(error => {
+      console.error('Error parsing form data:', error);
+      throw new Error('Failed to parse form data: ' + error.message);
+    });
+    
     const audioFile = formData.get('audio');
     
     if (!audioFile || !(audioFile instanceof File)) {
+      console.error('Audio file is missing or invalid');
       throw new Error('Audio file is required');
     }
 
-    console.log('Audio file received, size:', audioFile.size, 'type:', audioFile.type);
+    console.log('Audio file received:', {
+      name: audioFile.name,
+      size: audioFile.size,
+      type: audioFile.type
+    });
     
-    if (!openAIApiKey) {
-      console.error('OPENAI_API_KEY is not configured');
-      throw new Error('OpenAI API key is not configured');
+    if (audioFile.size === 0) {
+      console.error('Audio file is empty');
+      throw new Error('Audio file is empty');
     }
 
     // Create a FormData object for the OpenAI API
     const openaiFormData = new FormData();
     
-    // Convert the incoming audio to MP3 if needed
-    // For now, we'll just use the original file but with a corrected file extension
-    let processedAudioFile;
+    // Process the audio file with the correct extension
+    const fileExtension = audioFile.name.split('.').pop()?.toLowerCase() || 'webm';
+    const validExtensions = ['wav', 'mp3', 'ogg', 'm4a', 'mp4', 'mpeg', 'mpga', 'webm'];
     
-    if (audioFile.type === 'audio/webm') {
-      // If it's webm, we need to rename with the proper extension
-      processedAudioFile = new File(
-        [await audioFile.arrayBuffer()], 
-        'recording.webm', 
-        { type: 'audio/webm' }
-      );
-    } else {
-      // Otherwise just use the file as is
-      processedAudioFile = audioFile;
+    // Make sure extension matches type
+    let correctExtension = fileExtension;
+    if (audioFile.type.includes('webm')) correctExtension = 'webm';
+    else if (audioFile.type.includes('mp3')) correctExtension = 'mp3';
+    else if (audioFile.type.includes('wav')) correctExtension = 'wav';
+    else if (audioFile.type.includes('ogg')) correctExtension = 'ogg';
+    
+    if (!validExtensions.includes(correctExtension)) {
+      console.error(`Invalid file extension: ${correctExtension}`);
+      throw new Error(`Unsupported audio format. Supported formats are: ${validExtensions.join(', ')}`);
     }
+    
+    // Convert the audio to a file with the proper extension
+    const fileBuffer = await audioFile.arrayBuffer();
+    const processedAudioFile = new File(
+      [fileBuffer], 
+      `recording.${correctExtension}`, 
+      { type: audioFile.type }
+    );
     
     openaiFormData.append('file', processedAudioFile);
     openaiFormData.append('model', 'whisper-1');
 
     console.log('Sending request to OpenAI');
-    console.log('Audio being sent with type:', processedAudioFile.type);
+    console.log('Audio being sent:', {
+      filename: processedAudioFile.name,
+      type: processedAudioFile.type,
+      size: processedAudioFile.size
+    });
     
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
@@ -66,14 +94,34 @@ serve(async (req) => {
       body: openaiFormData,
     });
 
+    const responseText = await response.text();
+    console.log('OpenAI response status:', response.status);
+    
     if (!response.ok) {
-      const errorData = await response.json();
-      console.error('OpenAI API error:', errorData);
-      throw new Error(`OpenAI API error: ${JSON.stringify(errorData)}`);
+      let errorMessage = `OpenAI API error: Status ${response.status}`;
+      
+      try {
+        const errorData = JSON.parse(responseText);
+        console.error('OpenAI API error details:', errorData);
+        errorMessage += ` - ${JSON.stringify(errorData)}`;
+      } catch (e) {
+        console.error('Raw error response:', responseText);
+        errorMessage += ` - ${responseText.substring(0, 200)}`;
+      }
+      
+      throw new Error(errorMessage);
     }
 
-    const data = await response.json();
-    console.log('Transcription successful');
+    // Parse the JSON response
+    let data;
+    try {
+      data = JSON.parse(responseText);
+      console.log('Transcription successful');
+    } catch (e) {
+      console.error('Error parsing OpenAI response:', e);
+      console.error('Raw response:', responseText);
+      throw new Error('Failed to parse OpenAI response');
+    }
     
     return new Response(JSON.stringify({ text: data.text }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

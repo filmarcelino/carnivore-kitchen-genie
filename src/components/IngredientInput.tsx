@@ -2,7 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { Search, Mic, Loader2 } from 'lucide-react';
 import { transcribeAudio } from '../hooks/useRecipes';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/use-toast';
 
 interface IngredientInputProps {
   onSubmit: (ingredients: string) => void;
@@ -22,19 +22,48 @@ const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
     }
   };
 
+  const getSupportedMimeType = () => {
+    const types = ['audio/webm', 'audio/mp3', 'audio/wav', 'audio/ogg'];
+    for (const type of types) {
+      try {
+        if (MediaRecorder.isTypeSupported(type)) {
+          console.log(`Browser supports recording with mime type: ${type}`);
+          return type;
+        }
+      } catch (e) {
+        console.log(`Error checking support for ${type}:`, e);
+      }
+    }
+    console.log('No supported audio MIME types found');
+    return 'audio/webm'; // Fallback
+  };
+
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      // Specify audio/mp3 or audio/wav format for better compatibility with OpenAI's API
-      const mediaRecorder = new MediaRecorder(stream, { 
-        mimeType: 'audio/wav' 
+      console.log('Requesting microphone access');
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: true,
+        video: false
       });
+      
+      console.log('Microphone access granted');
+      const mimeType = getSupportedMimeType();
+      
+      let options = {};
+      try {
+        options = { mimeType };
+        console.log(`Using mime type for recording: ${mimeType}`);
+      } catch (e) {
+        console.log('Failed to set mime type, using default', e);
+      }
+      
+      const mediaRecorder = new MediaRecorder(stream, options);
       
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
       
       mediaRecorder.ondataavailable = (event) => {
+        console.log('Data available from recorder:', event.data?.type, event.data?.size);
         audioChunksRef.current.push(event.data);
       };
       
@@ -43,31 +72,55 @@ const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
         setIsProcessing(true);
         
         try {
-          // Use mp3 format which is supported by OpenAI
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-          console.log("Audio type:", audioBlob.type, "Audio size:", audioBlob.size);
+          console.log('Recording stopped, processing audio chunks');
+          if (audioChunksRef.current.length === 0) {
+            throw new Error('No audio data was recorded');
+          }
+          
+          const mimeType = audioChunksRef.current[0].type || 'audio/webm';
+          const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+          
+          console.log(`Audio preparation complete: type=${audioBlob.type}, size=${audioBlob.size} bytes`);
+          
+          if (audioBlob.size < 100) {
+            throw new Error('Audio recording is too short or empty');
+          }
           
           const transcription = await transcribeAudio(audioBlob);
+          console.log('Transcription received:', transcription);
           setIngredients(transcription);
-          toast.success('Voice input processed successfully');
+          toast({
+            title: "Success",
+            description: "Voice input processed successfully",
+          });
         } catch (error) {
           console.error('Transcription error:', error);
-          toast.error('Failed to process voice input');
+          toast({
+            title: "Error",
+            description: `Failed to process voice input: ${error.message}`,
+            variant: "destructive",
+          });
         } finally {
           setIsProcessing(false);
         }
       };
       
       mediaRecorder.start();
+      console.log('Recording started');
       setIsRecording(true);
     } catch (error) {
       console.error('Error accessing microphone:', error);
-      toast.error('Could not access microphone. Please check permissions.');
+      toast({
+        title: "Microphone Error",
+        description: `Could not access microphone: ${error.message}. Please check your browser permissions.`,
+        variant: "destructive",
+      });
     }
   };
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
+      console.log('Stopping recording');
       mediaRecorderRef.current.stop();
       
       // Stop all audio tracks

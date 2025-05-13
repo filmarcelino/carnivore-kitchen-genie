@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
@@ -166,35 +165,63 @@ export function useRecipes() {
 
 // Function to handle audio transcription using OpenAI Whisper API
 export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
-  // Make sure we're using a format that OpenAI's API accepts
-  if (!audioBlob.type.match(/(wav|mp3|ogg|m4a|mp4|mpeg|mpga|webm)/i)) {
-    throw new Error('Unsupported audio format. Please use WAV, MP3, OGG, M4A, MP4, MPEG, or WEBM.');
+  // Validate the audio blob
+  if (!audioBlob || audioBlob.size === 0) {
+    throw new Error('Invalid audio recording: Empty or corrupt file');
   }
   
-  console.log("Sending audio for transcription, type:", audioBlob.type, "size:", audioBlob.size);
+  // Make sure we're using a format that OpenAI's API accepts
+  const validFormats = /(wav|mp3|ogg|m4a|mp4|mpeg|mpga|webm)/i;
+  const mimeType = audioBlob.type || 'audio/webm';
+  
+  if (!mimeType.match(validFormats)) {
+    console.error(`Unsupported audio format: ${mimeType}`);
+    throw new Error(`Unsupported audio format: ${mimeType}. Please use WAV, MP3, OGG, M4A, MP4, MPEG, or WEBM.`);
+  }
+  
+  console.log(`Preparing audio for transcription: type=${mimeType}, size=${audioBlob.size} bytes`);
   
   const formData = new FormData();
-  formData.append('audio', audioBlob, audioBlob.type.includes('webm') ? 'recording.webm' : 'recording.wav');
+  
+  // Determine appropriate filename extension based on the MIME type
+  let filename = 'recording.webm';
+  if (mimeType.includes('mp3')) filename = 'recording.mp3';
+  else if (mimeType.includes('wav')) filename = 'recording.wav';
+  else if (mimeType.includes('ogg')) filename = 'recording.ogg';
+  
+  console.log(`Using filename: ${filename}`);
+  formData.append('audio', audioBlob, filename);
 
   // Using the anon key from the environment
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51dnVqcWlkaGpuYm9zZmN3YWh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUwODUyOTAsImV4cCI6MjA2MDY2MTI5MH0.LJX5gVpgj34euLc-mXkoPVVZK7eG9k_LBzCED8jN9Ls";
 
-  const response = await fetch('https://nuvujqidhjnbosfcwahw.supabase.co/functions/v1/transcribe-audio', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-      'apikey': SUPABASE_ANON_KEY,
-    },
-    body: formData,
-  });
+  console.log("Sending request to transcribe-audio edge function");
+  
+  try {
+    const response = await fetch('https://nuvujqidhjnbosfcwahw.supabase.co/functions/v1/transcribe-audio', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: formData,
+    });
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(`Transcription error: ${errorData.error || response.statusText}`);
+    console.log(`Response status: ${response.status}`);
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      console.error('Transcription error response:', errorData);
+      throw new Error(`Transcription error: ${errorData.error || response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log('Transcription success:', data);
+    return data.text;
+  } catch (error) {
+    console.error('Error during transcription request:', error);
+    throw error;
   }
-
-  const data = await response.json();
-  return data.text;
 };
 
 // Function to generate recipe image
