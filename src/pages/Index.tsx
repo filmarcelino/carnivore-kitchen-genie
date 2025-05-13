@@ -11,6 +11,8 @@ import RecipeList from '../components/RecipeList';
 import { useQuery } from '@tanstack/react-query';
 import { useRecipes, generateRecipe } from '../hooks/useRecipes';
 import { supabase } from '../integrations/supabase/client';
+import { useIsMobile } from '../hooks/use-mobile';
+import DesktopLayout from '../components/DesktopLayout';
 import type { Recipe } from '../types';
 
 const Index: React.FC = () => {
@@ -19,6 +21,7 @@ const Index: React.FC = () => {
   const [dietType, setDietType] = useState<'strict' | 'flexible'>('strict');
   const [isGenerating, setIsGenerating] = useState(false);
   const { getAllRecipes, getRecipesByCategory } = useRecipes();
+  const isMobile = useIsMobile();
 
   // Check for secure context
   const [isSecureContext, setIsSecureContext] = useState<boolean>(true);
@@ -119,6 +122,62 @@ const Index: React.FC = () => {
     );
   }
 
+  // For Desktop Layout
+  if (!isMobile) {
+    return (
+      <DesktopLayout session={session}>
+        <Header />
+        
+        <div className="container py-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              {!isSecureContext && (
+                <div className="mb-4 bg-yellow-100 border border-yellow-400 p-4 rounded-md">
+                  <h3 className="font-semibold text-yellow-800">HTTPS Required</h3>
+                  <p className="text-yellow-700 text-sm">
+                    Voice recording requires HTTPS. Some features may be limited in this environment.
+                  </p>
+                </div>
+              )}
+              
+              <IngredientInput onSubmit={handleIngredientSubmit} />
+              
+              <div className="mt-6">
+                <DietToggle selectedDiet={dietType} onChange={setDietType} />
+              </div>
+              
+              {isGenerating && (
+                <div className="mt-6 flex flex-col items-center">
+                  <Loader2 className="h-8 w-8 text-carnivore-primary animate-spin mb-2" />
+                  <p className="text-carnivore-secondary">Generating recipe...</p>
+                </div>
+              )}
+            </div>
+            
+            <div className="space-y-6">
+              <CategoryGrid />
+              
+              {(recipes && recipes.length > 0) ? (
+                <RecipeList 
+                  title={category 
+                    ? `${category.charAt(0).toUpperCase() + category.slice(1).replace('-', ' ')} Recipes` 
+                    : (session ? "Your Recipes" : "Example Recipes")
+                  } 
+                  recipes={recipes} 
+                />
+              ) : (
+                <div className="mt-8 text-center p-8 bg-carnivore-card rounded-xl">
+                  <p className="text-carnivore-secondary">No recipes found. Try creating one!</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </DesktopLayout>
+    );
+  }
+
+  // Original Mobile Layout
   return (
     <div className="leather-bg min-h-screen pb-20">
       <Header />
