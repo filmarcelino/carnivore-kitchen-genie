@@ -1,187 +1,168 @@
 
 import React, { useState, useRef } from 'react';
-import { Search, Mic, Loader2 } from 'lucide-react';
+import { Mic, Loader2, X, Send } from 'lucide-react';
 import { transcribeAudio } from '../hooks/useRecipes';
-import { toast } from '@/components/ui/use-toast';
+import { toast } from 'sonner';
 
 interface IngredientInputProps {
   onSubmit: (ingredients: string) => void;
 }
 
 const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
-  const [ingredients, setIngredients] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [ingredients, setIngredients] = useState<string>('');
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (ingredients.trim()) {
-      onSubmit(ingredients);
-    }
-  };
-
-  const getSupportedMimeType = () => {
-    const types = ['audio/webm', 'audio/mp3', 'audio/wav', 'audio/ogg'];
-    for (const type of types) {
-      try {
-        if (MediaRecorder.isTypeSupported(type)) {
-          console.log(`Browser supports recording with mime type: ${type}`);
-          return type;
-        }
-      } catch (e) {
-        console.log(`Error checking support for ${type}:`, e);
-      }
-    }
-    console.log('No supported audio MIME types found');
-    return 'audio/webm'; // Fallback
-  };
-
   const startRecording = async () => {
+    setRecordingError(null);
     try {
-      console.log('Requesting microphone access');
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: true,
-        video: false
-      });
-      
-      console.log('Microphone access granted');
-      const mimeType = getSupportedMimeType();
-      
-      let options = {};
-      try {
-        options = { mimeType };
-        console.log(`Using mime type for recording: ${mimeType}`);
-      } catch (e) {
-        console.log('Failed to set mime type, using default', e);
-      }
-      
-      const mediaRecorder = new MediaRecorder(stream, options);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
       
-      mediaRecorder.ondataavailable = (event) => {
-        console.log('Data available from recorder:', event.data?.type, event.data?.size);
-        audioChunksRef.current.push(event.data);
-      };
-      
-      mediaRecorder.onstop = async () => {
-        setIsRecording(false);
-        setIsProcessing(true);
-        
-        try {
-          console.log('Recording stopped, processing audio chunks');
-          if (audioChunksRef.current.length === 0) {
-            throw new Error('No audio data was recorded');
-          }
-          
-          const mimeType = audioChunksRef.current[0].type || 'audio/webm';
-          const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-          
-          console.log(`Audio preparation complete: type=${audioBlob.type}, size=${audioBlob.size} bytes`);
-          
-          if (audioBlob.size < 100) {
-            throw new Error('Audio recording is too short or empty');
-          }
-          
-          const transcription = await transcribeAudio(audioBlob);
-          console.log('Transcription received:', transcription);
-          setIngredients(transcription);
-          toast({
-            title: "Success",
-            description: "Voice input processed successfully",
-          });
-        } catch (error) {
-          console.error('Transcription error:', error);
-          toast({
-            title: "Error",
-            description: `Failed to process voice input: ${error.message}`,
-            variant: "destructive",
-          });
-        } finally {
-          setIsProcessing(false);
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
         }
       };
       
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        
+        if (audioBlob.size > 0) {
+          setIsTranscribing(true);
+          try {
+            const transcript = await transcribeAudio(audioBlob);
+            if (transcript) {
+              setIngredients(transcript);
+              toast.success('Successfully transcribed your voice input!');
+            } else {
+              throw new Error('No transcription returned');
+            }
+          } catch (error: any) {
+            console.error('Transcription error:', error);
+            setRecordingError(error.message || 'Failed to transcribe audio');
+            toast.error(`Transcription failed: ${error.message}`);
+          } finally {
+            setIsTranscribing(false);
+          }
+        } else {
+          setRecordingError('No audio recorded');
+          toast.error('No audio was recorded. Please try again.');
+        }
+        
+        // Stop all tracks
+        stream.getTracks().forEach(track => track.stop());
+      };
+      
       mediaRecorder.start();
-      console.log('Recording started');
       setIsRecording(true);
-    } catch (error) {
-      console.error('Error accessing microphone:', error);
-      toast({
-        title: "Microphone Error",
-        description: `Could not access microphone: ${error.message}. Please check your browser permissions.`,
-        variant: "destructive",
-      });
+    } catch (error: any) {
+      console.error('Recording error:', error);
+      setRecordingError(error.message || 'Could not access microphone');
+      toast.error(`Microphone access error: ${error.message}`);
     }
   };
-
+  
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
-      console.log('Stopping recording');
       mediaRecorderRef.current.stop();
-      
-      // Stop all audio tracks
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      setIsRecording(false);
     }
   };
-
-  const handleVoiceInput = () => {
-    if (isRecording) {
-      stopRecording();
+  
+  const handleCancelRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      // Clear the recorded chunks
+      audioChunksRef.current = [];
+      toast.info('Recording cancelled');
+    }
+  };
+  
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (ingredients.trim()) {
+      onSubmit(ingredients);
+      setIngredients('');
     } else {
-      startRecording();
+      toast.error('Please enter ingredients or record your voice');
     }
   };
-
+  
   return (
-    <div className="w-full max-w-md mx-auto">
-      <h2 className="text-2xl font-semibold mb-3 text-center">
-        What ingredients do you have?
-      </h2>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="relative">
-          <input
-            type="text"
-            value={ingredients}
-            onChange={(e) => setIngredients(e.target.value)}
-            placeholder="Ex.: 300g of steak, eggs, butter..."
-            className="input-field w-full pr-12"
-          />
-          <button 
-            type="button"
-            onClick={handleVoiceInput}
-            disabled={isProcessing}
-            className={`absolute right-3 top-1/2 transform -translate-y-1/2 transition-colors ${
-              isRecording 
-                ? 'text-carnivore-primary animate-pulse' 
-                : isProcessing 
-                ? 'text-carnivore-secondary opacity-60'
-                : 'text-carnivore-secondary hover:text-carnivore-primary'
-            }`}
-            title={isRecording ? "Stop recording" : "Voice input"}
+    <div className="card p-4">
+      <h2 className="text-xl font-bold mb-3 text-carnivore-foreground">What ingredients do you have?</h2>
+      
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <textarea
+          value={ingredients}
+          onChange={(e) => setIngredients(e.target.value)}
+          placeholder="Enter ingredients (e.g. beef, salt, butter)"
+          className="input-field min-h-[100px] resize-none"
+          disabled={isRecording || isTranscribing}
+        />
+        
+        {recordingError && (
+          <p className="text-red-500 text-sm">{recordingError}</p>
+        )}
+        
+        <div className="flex items-center gap-2">
+          {!isRecording ? (
+            <button
+              type="button"
+              onClick={startRecording}
+              className="bg-carnivore-muted text-carnivore-secondary p-3 rounded-full hover:text-carnivore-primary transition-colors disabled:opacity-50"
+              disabled={isTranscribing}
+            >
+              <Mic className="h-5 w-5" />
+            </button>
+          ) : (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={stopRecording}
+                className="bg-red-500 text-white p-3 rounded-full hover:bg-red-600 transition-colors"
+              >
+                <div className="w-5 h-5 flex items-center justify-center">
+                  <div className="w-3 h-3 bg-white rounded-sm"></div>
+                </div>
+              </button>
+              
+              <button
+                type="button"
+                onClick={handleCancelRecording}
+                className="bg-carnivore-muted text-carnivore-secondary p-3 rounded-full hover:text-carnivore-primary transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          )}
+          
+          <button
+            type="submit"
+            className="btn-primary flex-1 flex justify-center items-center"
+            disabled={isRecording || isTranscribing || !ingredients.trim()}
           >
-            {isProcessing ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
+            {isTranscribing ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                Transcribing...
+              </>
             ) : (
-              <Mic className={`h-5 w-5 ${isRecording ? 'text-red-500' : ''}`} />
+              <>
+                <Send className="h-5 w-5 mr-2" />
+                Generate Recipe
+              </>
             )}
           </button>
         </div>
-        <button 
-          type="submit" 
-          className="btn-primary w-full flex items-center justify-center"
-          disabled={isProcessing}
-        >
-          {isProcessing ? (
-            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-          ) : (
-            <Search className="h-5 w-5 mr-2" />
-          )}
-          Find Recipes
-        </button>
       </form>
     </div>
   );

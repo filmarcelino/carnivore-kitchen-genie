@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
@@ -194,11 +195,12 @@ export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
 
   // Using the anon key from the environment
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51dnVqcWlkaGpuYm9zZmN3YWh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUwODUyOTAsImV4cCI6MjA2MDY2MTI5MH0.LJX5gVpgj34euLc-mXkoPVVZK7eG9k_LBzCED8jN9Ls";
+  const SUPABASE_URL = "https://nuvujqidhjnbosfcwahw.supabase.co";
 
   console.log("Sending request to transcribe-audio edge function");
   
   try {
-    const response = await fetch('https://nuvujqidhjnbosfcwahw.supabase.co/functions/v1/transcribe-audio', {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/transcribe-audio`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
@@ -210,17 +212,28 @@ export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
     console.log(`Response status: ${response.status}`);
     
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-      console.error('Transcription error response:', errorData);
-      throw new Error(`Transcription error: ${errorData.error || response.statusText}`);
+      let errorMessage = `Transcription error: ${response.statusText}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = `Transcription error: ${errorData.error || response.statusText}`;
+        console.error('Transcription error response:', errorData);
+      } catch (parseError) {
+        console.error('Error parsing error response:', parseError);
+      }
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
     console.log('Transcription success:', data);
+    
+    if (!data.text) {
+      throw new Error('No transcription text returned from API');
+    }
+    
     return data.text;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error during transcription request:', error);
-    throw error;
+    throw new Error(`Transcription failed: ${error.message || 'Unknown error'}`);
   }
 };
 
