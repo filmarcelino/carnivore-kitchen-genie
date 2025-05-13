@@ -110,13 +110,17 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
       const mimeType = getPreferredMimeType();
       console.log(`Using MIME type: ${mimeType}`);
       
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      // Use explicit options object with correct mimeType
+      const mediaRecorder = new MediaRecorder(stream, { 
+        mimeType: mimeType,
+        audioBitsPerSecond: 128000 // Set reasonable bitrate
+      });
       mediaRecorderRef.current = mediaRecorder;
       
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
           audioChunksRef.current.push(e.data);
-          console.log(`Recorded audio chunk: ${e.data.size} bytes`);
+          console.log(`Recorded audio chunk: ${e.data.size} bytes, type: ${e.data.type}`);
         }
       };
       
@@ -132,9 +136,27 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
         // Stop all tracks
         stream.getTracks().forEach(track => track.stop());
         
+        // Make sure we have audio chunks
+        if (audioChunksRef.current.length === 0) {
+          console.error('No audio chunks recorded');
+          setState(prev => ({ ...prev, error: 'No audio recorded. Please try again.' }));
+          toast({ 
+            variant: "destructive", 
+            title: "Recording Error", 
+            description: "No audio was recorded. Please try again." 
+          });
+          return;
+        }
+        
         // Process recorded audio
         const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
         console.log(`Recorded audio: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
+        
+        // Log blob details for debugging
+        console.log('Audio blob details:', {
+          size: audioBlob.size,
+          type: audioBlob.type
+        });
         
         // Validate audio size
         if (audioBlob.size < 100) { // Arbitrary minimum size check
@@ -149,8 +171,9 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
         await transcribeAudio(audioBlob);
       };
       
-      // Start recording
-      mediaRecorder.start();
+      // Setup data collection - request data every 1 second to ensure we get chunks
+      mediaRecorder.start(1000);
+      console.log('Recording started with timeslice of 1000ms');
       
     } catch (error: any) {
       console.error('Recording error:', error);
@@ -218,7 +241,7 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
         error: null
       }));
       
-      toast({ title: "Transcription Complete", description: "Your speech has been converted to text" });
+      toast({ title: "Transcrição Concluída", description: "Sua voz foi convertida em texto" });
       
       // Call the completion callback if provided
       if (options?.onTranscriptionComplete) {
@@ -237,7 +260,7 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
       
       toast({ 
         variant: "destructive", 
-        title: "Transcription Failed", 
+        title: "Falha na Transcrição", 
         description: errorMessage
       });
       

@@ -208,12 +208,13 @@ export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
   console.log("Sending request to transcribe-audio edge function");
   
   try {
+    // Important: Do NOT set Content-Type header manually, let the browser set it with the boundary
     const response = await fetch(`${SUPABASE_URL}/functions/v1/transcribe-audio`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
         'apikey': SUPABASE_ANON_KEY,
-        'Content-Type': 'multipart/form-data',
+        // Remove the manual Content-Type header to let browser set it properly with boundary
       },
       body: formData,
     });

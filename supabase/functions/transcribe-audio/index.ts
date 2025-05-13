@@ -29,6 +29,15 @@ serve(async (req) => {
 
     console.log('API key found, proceeding with transcription');
 
+    // Double check Content-Type header
+    const contentType = req.headers.get('content-type');
+    console.log('Content-Type header:', contentType);
+    
+    if (!contentType || !contentType.includes('multipart/form-data')) {
+      console.error('Invalid Content-Type header:', contentType);
+      throw new Error('Invalid Content-Type. Must be multipart/form-data');
+    }
+
     const formData = await req.formData().catch(error => {
       console.error('Error parsing form data:', error);
       throw new Error('Failed to parse form data: ' + error.message);
