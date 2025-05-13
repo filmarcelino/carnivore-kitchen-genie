@@ -1,4 +1,3 @@
-
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -36,10 +35,29 @@ serve(async (req) => {
 
     // Create a FormData object for the OpenAI API
     const openaiFormData = new FormData();
-    openaiFormData.append('file', audioFile);
+    
+    // Convert the incoming audio to MP3 if needed
+    // For now, we'll just use the original file but with a corrected file extension
+    let processedAudioFile;
+    
+    if (audioFile.type === 'audio/webm') {
+      // If it's webm, we need to rename with the proper extension
+      processedAudioFile = new File(
+        [await audioFile.arrayBuffer()], 
+        'recording.webm', 
+        { type: 'audio/webm' }
+      );
+    } else {
+      // Otherwise just use the file as is
+      processedAudioFile = audioFile;
+    }
+    
+    openaiFormData.append('file', processedAudioFile);
     openaiFormData.append('model', 'whisper-1');
 
     console.log('Sending request to OpenAI');
+    console.log('Audio being sent with type:', processedAudioFile.type);
+    
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {

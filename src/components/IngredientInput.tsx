@@ -25,7 +25,11 @@ const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      
+      // Specify audio/mp3 or audio/wav format for better compatibility with OpenAI's API
+      const mediaRecorder = new MediaRecorder(stream, { 
+        mimeType: 'audio/wav' 
+      });
       
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
@@ -39,7 +43,10 @@ const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
         setIsProcessing(true);
         
         try {
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          // Use mp3 format which is supported by OpenAI
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+          console.log("Audio type:", audioBlob.type, "Audio size:", audioBlob.size);
+          
           const transcription = await transcribeAudio(audioBlob);
           setIngredients(transcription);
           toast.success('Voice input processed successfully');

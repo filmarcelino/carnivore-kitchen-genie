@@ -166,8 +166,15 @@ export function useRecipes() {
 
 // Function to handle audio transcription using OpenAI Whisper API
 export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
+  // Make sure we're using a format that OpenAI's API accepts
+  if (!audioBlob.type.match(/(wav|mp3|ogg|m4a|mp4|mpeg|mpga|webm)/i)) {
+    throw new Error('Unsupported audio format. Please use WAV, MP3, OGG, M4A, MP4, MPEG, or WEBM.');
+  }
+  
+  console.log("Sending audio for transcription, type:", audioBlob.type, "size:", audioBlob.size);
+  
   const formData = new FormData();
-  formData.append('audio', audioBlob, 'recording.webm');
+  formData.append('audio', audioBlob, audioBlob.type.includes('webm') ? 'recording.webm' : 'recording.wav');
 
   // Using the anon key from the environment
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51dnVqcWlkaGpuYm9zZmN3YWh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUwODUyOTAsImV4cCI6MjA2MDY2MTI5MH0.LJX5gVpgj34euLc-mXkoPVVZK7eG9k_LBzCED8jN9Ls";
