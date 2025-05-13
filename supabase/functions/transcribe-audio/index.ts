@@ -2,7 +2,8 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+// Check for API key in both possible environment variable names
+const openAIApiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('OPEN_API_KEY');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -22,9 +23,11 @@ serve(async (req) => {
   try {
     // Check if OpenAI API key is configured
     if (!openAIApiKey) {
-      console.error('OPENAI_API_KEY is not configured');
-      throw new Error('OpenAI API key is not configured in the environment');
+      console.error('OpenAI API key is not configured. Checked both OPENAI_API_KEY and OPEN_API_KEY');
+      throw new Error('OpenAI API key is not configured in the environment. Please check Supabase secrets configuration.');
     }
+
+    console.log('API key found, proceeding with transcription');
 
     const formData = await req.formData().catch(error => {
       console.error('Error parsing form data:', error);
