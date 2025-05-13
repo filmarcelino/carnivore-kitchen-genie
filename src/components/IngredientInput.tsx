@@ -1,8 +1,8 @@
 
-import React, { useState, useRef } from 'react';
-import { Mic, Loader2, X, Send } from 'lucide-react';
-import { transcribeAudio } from '../hooks/useRecipes';
-import { toast } from 'sonner';
+import React, { useState, useEffect } from 'react';
+import { Mic, Loader2, X, Send, RefreshCw, MicOff, AlertTriangle } from 'lucide-react';
+import { toast } from '../components/ui/use-toast';
+import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 
 interface IngredientInputProps {
   onSubmit: (ingredients: string) => void;
@@ -10,90 +10,52 @@ interface IngredientInputProps {
 
 const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
   const [ingredients, setIngredients] = useState<string>('');
-  const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
-  const [recordingError, setRecordingError] = useState<string | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-
-  const startRecording = async () => {
-    setRecordingError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-      
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          audioChunksRef.current.push(e.data);
-        }
-      };
-      
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        
-        if (audioBlob.size > 0) {
-          setIsTranscribing(true);
-          try {
-            const transcript = await transcribeAudio(audioBlob);
-            if (transcript) {
-              setIngredients(transcript);
-              toast.success('Successfully transcribed your voice input!');
-            } else {
-              throw new Error('No transcription returned');
-            }
-          } catch (error: any) {
-            console.error('Transcription error:', error);
-            setRecordingError(error.message || 'Failed to transcribe audio');
-            toast.error(`Transcription failed: ${error.message}`);
-          } finally {
-            setIsTranscribing(false);
-          }
-        } else {
-          setRecordingError('No audio recorded');
-          toast.error('No audio was recorded. Please try again.');
-        }
-        
-        // Stop all tracks
-        stream.getTracks().forEach(track => track.stop());
-      };
-      
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (error: any) {
-      console.error('Recording error:', error);
-      setRecordingError(error.message || 'Could not access microphone');
-      toast.error(`Microphone access error: ${error.message}`);
-    }
-  };
   
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  };
+  // Use our custom voice recorder hook
+  const {
+    isRecording,
+    isTranscribing,
+    error,
+    transcript,
+    startRecording,
+    stopRecording,
+    cancelRecording,
+    resetState,
+    isSupported
+  } = useVoiceRecorder({
+    onTranscriptionComplete: (text) => setIngredients(text),
+    onTranscriptionError: (err) => console.error('Transcription error in component:', err)
+  });
   
-  const handleCancelRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      // Clear the recorded chunks
-      audioChunksRef.current = [];
-      toast.info('Recording cancelled');
+  // Update ingredients when transcript changes
+  useEffect(() => {
+    if (transcript) {
+      setIngredients(transcript);
     }
-  };
+  }, [transcript]);
   
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
     if (ingredients.trim()) {
-      onSubmit(ingredients);
+      console.log('Submitting ingredients:', ingredients);
+      // Store original ingredients before clearing
+      const submittedIngredients = ingredients;
+      onSubmit(submittedIngredients);
+      // Only clear after successful submission
       setIngredients('');
     } else {
-      toast.error('Please enter ingredients or record your voice');
+      toast({
+        variant: "destructive",
+        title: "Empty Ingredients",
+        description: "Please enter ingredients or record your voice"
+      });
     }
+  };
+  
+  const handleRetry = () => {
+    resetState();
+    setIngredients('');
   };
   
   return (
@@ -109,17 +71,30 @@ const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
           disabled={isRecording || isTranscribing}
         />
         
-        {recordingError && (
-          <p className="text-red-500 text-sm">{recordingError}</p>
+        {error && (
+          <div className="bg-red-100 border border-red-300 rounded-md p-3 flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-red-500" />
+            <p className="text-red-700 text-sm">{error}</p>
+          </div>
         )}
         
         <div className="flex items-center gap-2">
-          {!isRecording ? (
+          {!isSupported ? (
+            <div className="bg-yellow-100 border border-yellow-300 rounded-md p-3 flex-1">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                <p className="text-yellow-700 text-sm">
+                  Voice recording is not supported in this browser or requires HTTPS.
+                </p>
+              </div>
+            </div>
+          ) : !isRecording ? (
             <button
               type="button"
               onClick={startRecording}
               className="bg-carnivore-muted text-carnivore-secondary p-3 rounded-full hover:text-carnivore-primary transition-colors disabled:opacity-50"
               disabled={isTranscribing}
+              title="Click to start recording"
             >
               <Mic className="h-5 w-5" />
             </button>
@@ -128,17 +103,21 @@ const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
               <button
                 type="button"
                 onClick={stopRecording}
-                className="bg-red-500 text-white p-3 rounded-full hover:bg-red-600 transition-colors"
+                className="relative bg-red-500 text-white p-3 rounded-full hover:bg-red-600 transition-colors"
+                title="Click to stop recording"
               >
-                <div className="w-5 h-5 flex items-center justify-center">
+                {/* Pulsing animation for recording indicator */}
+                <div className="absolute inset-0 bg-red-400 rounded-full animate-ping opacity-50"></div>
+                <div className="w-5 h-5 flex items-center justify-center z-10 relative">
                   <div className="w-3 h-3 bg-white rounded-sm"></div>
                 </div>
               </button>
               
               <button
                 type="button"
-                onClick={handleCancelRecording}
+                onClick={cancelRecording}
                 className="bg-carnivore-muted text-carnivore-secondary p-3 rounded-full hover:text-carnivore-primary transition-colors"
+                title="Cancel recording"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -162,7 +141,24 @@ const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
               </>
             )}
           </button>
+          
+          {(transcript || error) && (
+            <button 
+              type="button"
+              onClick={handleRetry}
+              className="bg-carnivore-muted text-carnivore-secondary p-3 rounded-full hover:text-carnivore-primary transition-colors"
+              title="Try again"
+            >
+              <RefreshCw className="h-5 w-5" />
+            </button>
+          )}
         </div>
+        
+        {isRecording && (
+          <div className="text-center text-sm text-carnivore-secondary mt-1">
+            Recording... Speak clearly into your microphone
+          </div>
+        )}
       </form>
     </div>
   );

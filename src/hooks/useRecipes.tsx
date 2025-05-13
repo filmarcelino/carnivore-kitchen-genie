@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
@@ -166,9 +165,17 @@ export function useRecipes() {
 
 // Function to handle audio transcription using OpenAI Whisper API
 export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
+  console.log('Starting audio transcription process');
+  
   // Validate the audio blob
   if (!audioBlob || audioBlob.size === 0) {
+    console.error('Invalid audio recording: Empty file');
     throw new Error('Invalid audio recording: Empty or corrupt file');
+  }
+  
+  if (audioBlob.size < 100) {
+    console.error('Audio file too small:', audioBlob.size, 'bytes');
+    throw new Error('Recording is too short. Please speak for longer.');
   }
   
   // Make sure we're using a format that OpenAI's API accepts
@@ -189,6 +196,7 @@ export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
   if (mimeType.includes('mp3')) filename = 'recording.mp3';
   else if (mimeType.includes('wav')) filename = 'recording.wav';
   else if (mimeType.includes('ogg')) filename = 'recording.ogg';
+  else if (mimeType.includes('mp4')) filename = 'recording.mp4';
   
   console.log(`Using filename: ${filename}`);
   formData.append('audio', audioBlob, filename);
@@ -205,6 +213,7 @@ export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
       headers: {
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
         'apikey': SUPABASE_ANON_KEY,
+        'Content-Type': 'multipart/form-data',
       },
       body: formData,
     });
@@ -224,12 +233,15 @@ export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
     }
 
     const data = await response.json();
-    console.log('Transcription success:', data);
+    console.log('Transcription success response:', data);
     
     if (!data.text) {
+      console.error('No transcription text returned');
       throw new Error('No transcription text returned from API');
     }
     
+    // Success! Return the transcript
+    console.log('Transcription successful:', data.text);
     return data.text;
   } catch (error: any) {
     console.error('Error during transcription request:', error);
@@ -239,6 +251,7 @@ export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
 
 // Function to generate recipe image
 export const generateRecipeImage = async (recipeName: string): Promise<string> => {
+  console.log('Generating recipe image for:', recipeName);
   const response = await fetch('https://nuvujqidhjnbosfcwahw.supabase.co/functions/v1/generate-image', {
     method: 'POST',
     headers: {
@@ -258,6 +271,9 @@ export const generateRecipeImage = async (recipeName: string): Promise<string> =
 
 // Function to generate recipe from ingredients
 export const generateRecipe = async (ingredients: string, dietType: 'strict' | 'flexible'): Promise<Recipe> => {
+  console.log('Generating recipe with ingredients:', ingredients);
+  console.log('Diet type:', dietType);
+  
   const response = await fetch('https://nuvujqidhjnbosfcwahw.supabase.co/functions/v1/generate-recipe', {
     method: 'POST',
     headers: {

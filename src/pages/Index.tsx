@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Home, Search, Plus, Menu, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/use-toast';
 import Header from '../components/Header';
 import IngredientInput from '../components/IngredientInput';
 import DietToggle from '../components/DietToggle';
@@ -19,6 +19,26 @@ const Index: React.FC = () => {
   const [dietType, setDietType] = useState<'strict' | 'flexible'>('strict');
   const [isGenerating, setIsGenerating] = useState(false);
   const { getAllRecipes, getRecipesByCategory } = useRecipes();
+
+  // Check for secure context
+  const [isSecureContext, setIsSecureContext] = useState<boolean>(true);
+  
+  useEffect(() => {
+    const secure = window.isSecureContext || 
+      window.location.hostname === 'localhost' || 
+      window.location.hostname === '127.0.0.1';
+    
+    setIsSecureContext(secure);
+    
+    if (!secure) {
+      console.warn('Application is not running in a secure context. Some features may be limited.');
+      toast({
+        variant: "destructive", 
+        title: "Security Warning", 
+        description: "This app should be accessed via HTTPS for all features to work properly."
+      });
+    }
+  }, []);
 
   // Fetch recipes based on category or all recipes
   const { data: recipes, isLoading } = useQuery({
@@ -43,13 +63,27 @@ const Index: React.FC = () => {
 
   const handleIngredientSubmit = async (ingredients: string) => {
     if (!ingredients.trim()) {
-      toast.error('Please enter some ingredients');
+      toast({
+        variant: "destructive",
+        title: "Empty Ingredients",
+        description: "Please enter some ingredients"
+      });
       return;
     }
 
+    console.log('Submitting ingredients for recipe generation:', ingredients);
+    console.log('Diet type:', dietType);
+
     try {
       setIsGenerating(true);
+      
+      toast({
+        title: "Generating Recipe",
+        description: "Please wait while we create your recipe..."
+      });
+      
       const generatedRecipe = await generateRecipe(ingredients, dietType);
+      console.log('Recipe generated successfully:', generatedRecipe);
       
       // Store the generated recipe in local storage
       const generatedRecipes = {
@@ -58,11 +92,20 @@ const Index: React.FC = () => {
       };
       localStorage.setItem('generatedRecipe', JSON.stringify(generatedRecipes));
       
+      toast({
+        title: "Recipe Created!",
+        description: `Your ${generatedRecipe.name} recipe is ready.`
+      });
+      
       // Navigate to view the recipe
       navigate(`/recipe/${generatedRecipes.id}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Recipe generation error:', error);
-      toast.error('Failed to generate recipe');
+      toast({
+        variant: "destructive",
+        title: "Recipe Generation Failed",
+        description: error.message || "Failed to generate recipe. Please try again."
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -81,6 +124,15 @@ const Index: React.FC = () => {
       <Header />
       
       <div className="container max-w-2xl px-4 py-8">
+        {!isSecureContext && (
+          <div className="mb-4 bg-yellow-100 border border-yellow-400 p-4 rounded-md">
+            <h3 className="font-semibold text-yellow-800">HTTPS Required</h3>
+            <p className="text-yellow-700 text-sm">
+              Voice recording requires HTTPS. Some features may be limited in this environment.
+            </p>
+          </div>
+        )}
+        
         <IngredientInput onSubmit={handleIngredientSubmit} />
         
         <div className="mt-8">

@@ -52,35 +52,43 @@ serve(async (req) => {
       throw new Error('Audio file is empty');
     }
 
+    if (audioFile.size < 100) {
+      console.error('Audio file is too small');
+      throw new Error('Audio recording is too short. Please speak longer.');
+    }
+
+    // Determine file extension and appropriate MIME type
+    let correctExtension = 'webm';
+    let correctMimeType = 'audio/webm';
+    
+    if (audioFile.type.includes('mp3')) {
+      correctExtension = 'mp3';
+      correctMimeType = 'audio/mpeg';
+    } else if (audioFile.type.includes('wav')) {
+      correctExtension = 'wav';
+      correctMimeType = 'audio/wav';
+    } else if (audioFile.type.includes('ogg')) {
+      correctExtension = 'ogg';
+      correctMimeType = 'audio/ogg';
+    } else if (audioFile.type.includes('mp4')) {
+      correctExtension = 'mp4';
+      correctMimeType = 'audio/mp4';
+    }
+
     // Create a FormData object for the OpenAI API
     const openaiFormData = new FormData();
     
     // Process the audio file with the correct extension
-    const fileExtension = audioFile.name.split('.').pop()?.toLowerCase() || 'webm';
-    const validExtensions = ['wav', 'mp3', 'ogg', 'm4a', 'mp4', 'mpeg', 'mpga', 'webm'];
-    
-    // Make sure extension matches type
-    let correctExtension = fileExtension;
-    if (audioFile.type.includes('webm')) correctExtension = 'webm';
-    else if (audioFile.type.includes('mp3')) correctExtension = 'mp3';
-    else if (audioFile.type.includes('wav')) correctExtension = 'wav';
-    else if (audioFile.type.includes('ogg')) correctExtension = 'ogg';
-    
-    if (!validExtensions.includes(correctExtension)) {
-      console.error(`Invalid file extension: ${correctExtension}`);
-      throw new Error(`Unsupported audio format. Supported formats are: ${validExtensions.join(', ')}`);
-    }
-    
-    // Convert the audio to a file with the proper extension
     const fileBuffer = await audioFile.arrayBuffer();
     const processedAudioFile = new File(
       [fileBuffer], 
       `recording.${correctExtension}`, 
-      { type: audioFile.type }
+      { type: correctMimeType }
     );
     
     openaiFormData.append('file', processedAudioFile);
     openaiFormData.append('model', 'whisper-1');
+    openaiFormData.append('language', 'pt'); // Set language to Portuguese
 
     console.log('Sending request to OpenAI');
     console.log('Audio being sent:', {
@@ -120,6 +128,11 @@ serve(async (req) => {
     try {
       data = JSON.parse(responseText);
       console.log('Transcription successful');
+      
+      if (!data.text || data.text.trim() === '') {
+        console.error('Empty transcription returned');
+        throw new Error('No speech detected. Please try speaking more clearly.');
+      }
     } catch (e) {
       console.error('Error parsing OpenAI response:', e);
       console.error('Raw response:', responseText);
