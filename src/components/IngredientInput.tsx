@@ -1,6 +1,8 @@
 
-import React, { useState } from 'react';
-import { Search, Mic } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Search, Mic, Loader2 } from 'lucide-react';
+import { transcribeAudio } from '../hooks/useRecipes';
+import { toast } from 'sonner';
 
 interface IngredientInputProps {
   onSubmit: (ingredients: string) => void;
@@ -8,11 +10,69 @@ interface IngredientInputProps {
 
 const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
   const [ingredients, setIngredients] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (ingredients.trim()) {
       onSubmit(ingredients);
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data);
+      };
+      
+      mediaRecorder.onstop = async () => {
+        setIsRecording(false);
+        setIsProcessing(true);
+        
+        try {
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          const transcription = await transcribeAudio(audioBlob);
+          setIngredients(transcription);
+          toast.success('Voice input processed successfully');
+        } catch (error) {
+          console.error('Transcription error:', error);
+          toast.error('Failed to process voice input');
+        } finally {
+          setIsProcessing(false);
+        }
+      };
+      
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Error accessing microphone:', error);
+      toast.error('Could not access microphone. Please check permissions.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      
+      // Stop all audio tracks
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+    }
+  };
+
+  const handleVoiceInput = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
     }
   };
 
@@ -32,14 +92,34 @@ const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
           />
           <button 
             type="button"
-            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-carnivore-secondary hover:text-carnivore-primary transition-colors"
-            title="Voice input (coming soon)"
+            onClick={handleVoiceInput}
+            disabled={isProcessing}
+            className={`absolute right-3 top-1/2 transform -translate-y-1/2 transition-colors ${
+              isRecording 
+                ? 'text-carnivore-primary animate-pulse' 
+                : isProcessing 
+                ? 'text-carnivore-secondary opacity-60'
+                : 'text-carnivore-secondary hover:text-carnivore-primary'
+            }`}
+            title={isRecording ? "Stop recording" : "Voice input"}
           >
-            <Mic className="h-5 w-5" />
+            {isProcessing ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Mic className={`h-5 w-5 ${isRecording ? 'text-red-500' : ''}`} />
+            )}
           </button>
         </div>
-        <button type="submit" className="btn-primary w-full flex items-center justify-center">
-          <Search className="h-5 w-5 mr-2" />
+        <button 
+          type="submit" 
+          className="btn-primary w-full flex items-center justify-center"
+          disabled={isProcessing}
+        >
+          {isProcessing ? (
+            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+          ) : (
+            <Search className="h-5 w-5 mr-2" />
+          )}
           Find Recipes
         </button>
       </form>

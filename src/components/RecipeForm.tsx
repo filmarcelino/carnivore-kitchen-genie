@@ -1,7 +1,10 @@
 
 import React, { useState } from 'react';
-import { Plus, X, Camera } from 'lucide-react';
+import { Plus, X, Camera, Sparkles, Loader2 } from 'lucide-react';
 import DietToggle from './DietToggle';
+import OCRScanner from './OCRScanner';
+import { generateRecipeImage } from '../hooks/useRecipes';
+import { toast } from 'sonner';
 import type { Recipe, RecipeCategory } from '../types';
 
 interface RecipeFormProps {
@@ -17,6 +20,8 @@ const RecipeForm: React.FC<RecipeFormProps> = ({ onSubmit, initialData }) => {
   const [category, setCategory] = useState<RecipeCategory>(initialData?.category || 'quick-grill');
   const [image, setImage] = useState<string | undefined>(initialData?.image);
   const [prepTime, setPrepTime] = useState<number | undefined>(initialData?.prepTime);
+  const [showScanner, setShowScanner] = useState(false);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
 
   const handleAddIngredient = () => {
     setIngredients([...ingredients, '']);
@@ -71,6 +76,40 @@ const RecipeForm: React.FC<RecipeFormProps> = ({ onSubmit, initialData }) => {
     });
   };
 
+  const handleScanComplete = (data: any) => {
+    if (data.name) setName(data.name);
+    if (data.ingredients && Array.isArray(data.ingredients)) {
+      setIngredients(data.ingredients);
+    }
+    if (data.instructions && Array.isArray(data.instructions)) {
+      setInstructions(data.instructions);
+    }
+    if (data.prepTime) setPrepTime(data.prepTime);
+    
+    // Close the scanner
+    setShowScanner(false);
+    toast.success('Recipe details applied from scan!');
+  };
+
+  const handleGenerateImage = async () => {
+    if (!name.trim()) {
+      toast.error('Please enter a recipe name first');
+      return;
+    }
+
+    setIsGeneratingImage(true);
+    try {
+      const imageUrl = await generateRecipeImage(name);
+      setImage(imageUrl);
+      toast.success('Recipe image generated!');
+    } catch (error) {
+      console.error('Image generation error:', error);
+      toast.error('Failed to generate image');
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div>
@@ -96,7 +135,51 @@ const RecipeForm: React.FC<RecipeFormProps> = ({ onSubmit, initialData }) => {
             </div>
           )}
         </div>
+        <div className="mt-2 flex space-x-2">
+          <button
+            type="button"
+            onClick={() => setShowScanner(true)}
+            className="text-sm flex items-center text-carnivore-secondary hover:text-carnivore-primary transition-colors"
+          >
+            <Camera className="h-4 w-4 mr-1" />
+            Scan Recipe
+          </button>
+          <button
+            type="button"
+            onClick={handleGenerateImage}
+            disabled={isGeneratingImage}
+            className="text-sm flex items-center text-carnivore-secondary hover:text-carnivore-primary transition-colors"
+          >
+            {isGeneratingImage ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4 mr-1" />
+                Generate Image
+              </>
+            )}
+          </button>
+        </div>
       </div>
+
+      {showScanner && (
+        <div className="mt-4 p-4 bg-carnivore-card rounded-lg">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-semibold">Scan Recipe</h3>
+            <button
+              type="button"
+              onClick={() => setShowScanner(false)}
+              className="text-carnivore-secondary hover:text-carnivore-primary"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <OCRScanner onScanComplete={handleScanComplete} />
+        </div>
+      )}
 
       <div>
         <label htmlFor="name" className="block text-carnivore-foreground mb-2">

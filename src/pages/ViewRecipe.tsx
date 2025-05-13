@@ -1,74 +1,100 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, Share, Heart, Printer } from 'lucide-react';
+import { ArrowLeft, Edit, Share, Heart, Printer, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import Header from '../components/Header';
-import type { Recipe } from '../types';
+import { useQuery } from '@tanstack/react-query';
+import { useRecipes } from '../hooks/useRecipes';
+import { supabase } from '../integrations/supabase/client';
 
 const ViewRecipe: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [recipe, setRecipe] = useState<Recipe | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { getRecipeById } = useRecipes();
 
-  // Mock data for our first version
-  const mockRecipe: Recipe = {
-    id: 'steak-eggs',
-    name: 'Pan-Seared Steak with Fried Eggs',
-    image: 'https://images.unsplash.com/photo-1588168333986-5078d3ae3976?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
-    ingredients: [
-      '300g ribeye steak',
-      '2 eggs',
-      'Sea salt to taste',
-      '1 tbsp butter'
-    ],
-    instructions: [
-      'Remove the steak from the refrigerator 30 minutes before cooking to bring it to room temperature.',
-      'Season the steak generously with sea salt on both sides.',
-      'Heat a cast-iron skillet over high heat until very hot.',
-      'Add the steak to the dry pan and cook for 3-4 minutes on each side for medium-rare.',
-      'Remove the steak and let it rest on a plate.',
-      'Lower the heat to medium and add butter to the same pan.',
-      'Crack the eggs into the pan and cook until the whites are set but yolks are still runny.',
-      'Serve the steak with the eggs on top.'
-    ],
-    macros: {
-      protein: 45,
-      fat: 36,
-      carbs: 1
+  // Check if this is a temporary generated recipe
+  const isTemporaryRecipe = id?.startsWith('temp-');
+
+  // Get user session
+  const { data: session } = useQuery({
+    queryKey: ['session'],
+    queryFn: async () => {
+      const { data } = await supabase.auth.getSession();
+      return data.session;
     },
-    dietType: 'strict',
-    category: 'pan-classics',
-    prepTime: 15,
-    cookingMethod: 'pan'
+  });
+
+  // Fetch recipe data from Supabase or localStorage for temp recipes
+  const { data: recipe, isLoading, error } = useQuery({
+    queryKey: ['recipe', id],
+    queryFn: async () => {
+      if (isTemporaryRecipe && id) {
+        // Get recipe from localStorage for temp recipes
+        const tempRecipe = JSON.parse(localStorage.getItem('generatedRecipe') || 'null');
+        if (!tempRecipe) throw new Error('Recipe not found');
+        return tempRecipe;
+      } else if (id) {
+        // Get recipe from database
+        return await getRecipeById(id);
+      }
+      throw new Error('Invalid recipe ID');
+    },
+  });
+
+  const handleSaveRecipe = async () => {
+    if (!session) {
+      toast.error('You need to log in to save recipes');
+      return;
+    }
+
+    if (recipe && isTemporaryRecipe) {
+      try {
+        // Remove the temp ID to let Supabase generate a new one
+        const { id, ...recipeWithoutId } = recipe;
+        
+        // Insert into database
+        const { data, error } = await supabase
+          .from('recipes')
+          .insert({
+            ...recipeWithoutId,
+            user_id: session.user.id,
+            diet_type: recipe.dietType,
+            image_url: recipe.image,
+            prep_time: recipe.prepTime,
+            macros: {
+              protein: recipe.macros?.protein || 0,
+              fat: recipe.macros?.fat || 0,
+              carbs: recipe.macros?.carbs || 0
+            }
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        // Clear temp recipe from localStorage
+        localStorage.removeItem('generatedRecipe');
+
+        // Navigate to the newly created recipe
+        toast.success('Recipe saved successfully!');
+        navigate(`/recipe/${data.id}`);
+      } catch (error) {
+        console.error('Error saving recipe:', error);
+        toast.error('Failed to save recipe');
+      }
+    }
   };
 
-  useEffect(() => {
-    // In a real app, we would fetch from API or local storage
-    setTimeout(() => {
-      if (id === 'steak-eggs') {
-        setRecipe(mockRecipe);
-      } else {
-        // Try to get from localStorage in our demo
-        const storageRecipes = JSON.parse(localStorage.getItem('carnivoreRecipes') || '[]');
-        const foundRecipe = storageRecipes.find((r: Recipe) => r.id === id);
-        if (foundRecipe) {
-          setRecipe(foundRecipe);
-        }
-      }
-      setLoading(false);
-    }, 300);
-  }, [id]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="leather-bg min-h-screen flex items-center justify-center">
-        <div className="text-carnivore-secondary">Loading recipe...</div>
+        <Loader2 className="h-8 w-8 text-carnivore-primary animate-spin" />
       </div>
     );
   }
 
-  if (!recipe) {
+  if (error || !recipe) {
     return (
       <div className="leather-bg min-h-screen">
         <Header />
@@ -187,13 +213,23 @@ const ViewRecipe: React.FC = () => {
           </section>
           
           <div className="mt-8 flex justify-center">
-            <button 
-              onClick={() => navigate(`/edit-recipe/${recipe.id}`)}
-              className="btn-secondary flex items-center"
-            >
-              <Edit className="h-4 w-4 mr-2" />
-              Edit Recipe
-            </button>
+            {isTemporaryRecipe ? (
+              <button 
+                onClick={handleSaveRecipe}
+                className="btn-primary flex items-center"
+              >
+                <Heart className="h-4 w-4 mr-2" />
+                Save Recipe
+              </button>
+            ) : (
+              <button 
+                onClick={() => navigate(`/edit-recipe/${recipe.id}`)}
+                className="btn-secondary flex items-center"
+              >
+                <Edit className="h-4 w-4 mr-2" />
+                Edit Recipe
+              </button>
+            )}
           </div>
         </div>
       </div>

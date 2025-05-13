@@ -1,79 +1,72 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Home, Search, Plus, Menu } from 'lucide-react';
+import { Home, Search, Plus, Menu, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import Header from '../components/Header';
 import IngredientInput from '../components/IngredientInput';
 import DietToggle from '../components/DietToggle';
 import CategoryGrid from '../components/CategoryGrid';
 import RecipeList from '../components/RecipeList';
+import { useQuery } from '@tanstack/react-query';
+import { useRecipes, generateRecipe } from '../hooks/useRecipes';
+import { supabase } from '../integrations/supabase/client';
 import type { Recipe } from '../types';
-
-const exampleRecipes: Recipe[] = [
-  {
-    id: 'steak-eggs',
-    name: 'Pan-Seared Steak with Fried Eggs',
-    image: 'https://images.unsplash.com/photo-1588168333986-5078d3ae3976?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
-    ingredients: ['300g ribeye steak', '2 eggs', 'Sea salt', '1 tbsp butter'],
-    instructions: [
-      'Season steak with salt',
-      'Sear on high heat for 3-4 minutes per side',
-      'Let rest',
-      'Fry eggs in the same pan',
-      'Serve together'
-    ],
-    macros: {
-      protein: 45,
-      fat: 36,
-      carbs: 1
-    },
-    dietType: 'strict',
-    category: 'pan-classics',
-    prepTime: 15
-  },
-  {
-    id: 'ribeye-butter',
-    name: 'Butter-Basted Ribeye',
-    image: 'https://images.unsplash.com/photo-1504973960431-1c467e159aa4?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
-    ingredients: ['400g ribeye steak', 'Sea salt', '3 tbsp butter', 'Rosemary', 'Garlic'],
-    instructions: [
-      'Season ribeye generously with salt',
-      'Cook in cast iron on high heat for 2 minutes each side',
-      'Add butter, rosemary and garlic',
-      'Baste continuously for 3-4 minutes',
-      'Rest for 5-10 minutes before serving'
-    ],
-    macros: {
-      protein: 52,
-      fat: 48,
-      carbs: 0
-    },
-    dietType: 'strict',
-    category: 'quick-grill',
-    prepTime: 20
-  }
-];
 
 const Index: React.FC = () => {
   const navigate = useNavigate();
   const [dietType, setDietType] = useState<'strict' | 'flexible'>('strict');
-  const [savedRecipes, setSavedRecipes] = useState<Recipe[]>([]);
-  
-  useEffect(() => {
-    // In a real app, we would fetch from API
-    // For now, we'll just use local storage for demo purposes
-    const storedRecipes = localStorage.getItem('carnivoreRecipes');
-    if (storedRecipes) {
-      setSavedRecipes(JSON.parse(storedRecipes));
-    }
-  }, []);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const { getAllRecipes } = useRecipes();
 
-  const handleIngredientSubmit = (ingredients: string) => {
-    // In a real app, we would call an API with the ingredients and dietType
-    console.log('Searching for recipes with:', ingredients, 'Diet type:', dietType);
-    // For now, we'll navigate to the example recipe
-    navigate('/recipe/steak-eggs');
+  const { data: recipes, isLoading } = useQuery({
+    queryKey: ['recipes'],
+    queryFn: getAllRecipes,
+  });
+
+  // Check for user authentication
+  const { data: session } = useQuery({
+    queryKey: ['session'],
+    queryFn: async () => {
+      const { data } = await supabase.auth.getSession();
+      return data.session;
+    },
+  });
+
+  const handleIngredientSubmit = async (ingredients: string) => {
+    if (!ingredients.trim()) {
+      toast.error('Please enter some ingredients');
+      return;
+    }
+
+    try {
+      setIsGenerating(true);
+      const generatedRecipe = await generateRecipe(ingredients, dietType);
+      
+      // Store the generated recipe in local storage
+      const generatedRecipes = JSON.parse(localStorage.getItem('generatedRecipe') || 'null') || { 
+        ...generatedRecipe,
+        id: `temp-${Date.now()}`
+      };
+      localStorage.setItem('generatedRecipe', JSON.stringify(generatedRecipes));
+      
+      // Navigate to view the recipe
+      navigate(`/recipe/${generatedRecipes.id}`);
+    } catch (error) {
+      console.error('Recipe generation error:', error);
+      toast.error('Failed to generate recipe');
+    } finally {
+      setIsGenerating(false);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="leather-bg min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 text-carnivore-primary animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="leather-bg min-h-screen pb-20">
@@ -88,12 +81,19 @@ const Index: React.FC = () => {
         
         <CategoryGrid />
         
-        {(savedRecipes.length > 0 || exampleRecipes.length > 0) && (
-          <RecipeList 
-            title="Your Recipes" 
-            recipes={savedRecipes.length > 0 ? savedRecipes : exampleRecipes} 
-          />
+        {isGenerating && (
+          <div className="mt-8 flex flex-col items-center">
+            <Loader2 className="h-8 w-8 text-carnivore-primary animate-spin mb-2" />
+            <p className="text-carnivore-secondary">Generating recipe...</p>
+          </div>
         )}
+        
+        {(recipes && recipes.length > 0) ? (
+          <RecipeList 
+            title={session ? "Your Recipes" : "Example Recipes"} 
+            recipes={recipes} 
+          />
+        ) : null}
       </div>
       
       {/* Fixed bottom navigation */}
