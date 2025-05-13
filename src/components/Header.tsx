@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Meat } from 'lucide-react';
+import { Beef } from 'lucide-react';
 
 const Header = () => {
   return (
@@ -9,7 +9,7 @@ const Header = () => {
       <div className="flex items-center justify-center">
         <Link to="/" className="flex items-center space-x-2">
           <div className="bg-carnivore-primary rounded-full p-2">
-            <Meat className="h-6 w-6 text-white" />
+            <Beef className="h-6 w-6 text-white" />
           </div>
           <div className="flex flex-col">
             <span className="font-bold text-carnivore-foreground tracking-wider text-lg">

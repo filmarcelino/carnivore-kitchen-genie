@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ChefHat, Egg, Utensils, Meat } from 'lucide-react';
+import { ChefHat, Egg, Utensils, Beef } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const categories = [
@@ -17,7 +17,7 @@ const categories = [
   {
     id: 'bbq',
     name: 'Barbecue',
-    icon: <Meat className="h-8 w-8" />,
+    icon: <Beef className="h-8 w-8" />,
   },
   {
     id: 'offal',
