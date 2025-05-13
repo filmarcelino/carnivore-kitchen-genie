@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Mic, Loader2, X, Send, RefreshCw, MicOff, AlertTriangle } from 'lucide-react';
-import { toast } from '../components/ui/use-toast';
+import { toast } from '../hooks/use-toast';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 
 interface IngredientInputProps {
@@ -23,8 +23,22 @@ const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
     resetState,
     isSupported
   } = useVoiceRecorder({
-    onTranscriptionComplete: (text) => setIngredients(text),
-    onTranscriptionError: (err) => console.error('Transcription error in component:', err)
+    onTranscriptionComplete: (text) => {
+      console.log('Transcription completed:', text);
+      setIngredients(text);
+      toast({
+        title: "Transcrição Concluída",
+        description: "Sua voz foi convertida em texto"
+      });
+    },
+    onTranscriptionError: (err) => {
+      console.error('Transcription error in component:', err);
+      toast({
+        variant: "destructive", 
+        title: "Falha na Transcrição", 
+        description: err.message || "Erro ao transcrever áudio"
+      });
+    }
   });
   
   // Update ingredients when transcript changes
@@ -41,32 +55,43 @@ const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
       console.log('Submitting ingredients:', ingredients);
       // Store original ingredients before clearing
       const submittedIngredients = ingredients;
-      onSubmit(submittedIngredients);
-      // Only clear after successful submission
-      setIngredients('');
+      
+      try {
+        onSubmit(submittedIngredients);
+        // Only clear after successful submission
+        setIngredients('');
+      } catch (error) {
+        console.error('Error submitting ingredients:', error);
+        toast({
+          variant: "destructive",
+          title: "Erro ao Enviar",
+          description: "Houve um problema ao enviar os ingredientes. Tente novamente."
+        });
+      }
     } else {
       toast({
         variant: "destructive",
-        title: "Empty Ingredients",
-        description: "Please enter ingredients or record your voice"
+        title: "Ingredientes Vazios",
+        description: "Por favor, informe os ingredientes ou grave sua voz"
       });
     }
   };
   
   const handleRetry = () => {
+    console.log('Retrying voice recording');
     resetState();
     setIngredients('');
   };
   
   return (
     <div className="card p-4">
-      <h2 className="text-xl font-bold mb-3 text-carnivore-foreground">What ingredients do you have?</h2>
+      <h2 className="text-xl font-bold mb-3 text-carnivore-foreground">Quais ingredientes você tem?</h2>
       
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         <textarea
           value={ingredients}
           onChange={(e) => setIngredients(e.target.value)}
-          placeholder="Enter ingredients (e.g. beef, salt, butter)"
+          placeholder="Digite os ingredientes (ex: carne, sal, manteiga)"
           className="input-field min-h-[100px] resize-none"
           disabled={isRecording || isTranscribing}
         />
@@ -84,7 +109,7 @@ const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-yellow-500" />
                 <p className="text-yellow-700 text-sm">
-                  Voice recording is not supported in this browser or requires HTTPS.
+                  Gravação de voz não suportada neste navegador ou requer HTTPS.
                 </p>
               </div>
             </div>
@@ -94,7 +119,7 @@ const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
               onClick={startRecording}
               className="bg-carnivore-muted text-carnivore-secondary p-3 rounded-full hover:text-carnivore-primary transition-colors disabled:opacity-50"
               disabled={isTranscribing}
-              title="Click to start recording"
+              title="Clique para iniciar a gravação"
             >
               <Mic className="h-5 w-5" />
             </button>
@@ -104,7 +129,7 @@ const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
                 type="button"
                 onClick={stopRecording}
                 className="relative bg-red-500 text-white p-3 rounded-full hover:bg-red-600 transition-colors"
-                title="Click to stop recording"
+                title="Clique para parar a gravação"
               >
                 {/* Pulsing animation for recording indicator */}
                 <div className="absolute inset-0 bg-red-400 rounded-full animate-ping opacity-50"></div>
@@ -117,7 +142,7 @@ const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
                 type="button"
                 onClick={cancelRecording}
                 className="bg-carnivore-muted text-carnivore-secondary p-3 rounded-full hover:text-carnivore-primary transition-colors"
-                title="Cancel recording"
+                title="Cancelar gravação"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -132,12 +157,12 @@ const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
             {isTranscribing ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                Transcribing...
+                Transcrevendo...
               </>
             ) : (
               <>
                 <Send className="h-5 w-5 mr-2" />
-                Generate Recipe
+                Gerar Receita
               </>
             )}
           </button>
@@ -147,7 +172,7 @@ const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
               type="button"
               onClick={handleRetry}
               className="bg-carnivore-muted text-carnivore-secondary p-3 rounded-full hover:text-carnivore-primary transition-colors"
-              title="Try again"
+              title="Tentar novamente"
             >
               <RefreshCw className="h-5 w-5" />
             </button>
@@ -156,7 +181,7 @@ const IngredientInput: React.FC<IngredientInputProps> = ({ onSubmit }) => {
         
         {isRecording && (
           <div className="text-center text-sm text-carnivore-secondary mt-1">
-            Recording... Speak clearly into your microphone
+            Gravando... Fale claramente no seu microfone
           </div>
         )}
       </form>

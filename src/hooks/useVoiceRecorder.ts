@@ -1,6 +1,6 @@
 
 import { useState, useRef, useEffect } from 'react';
-import { toast } from '../components/ui/use-toast';
+import { toast } from './use-toast';
 
 interface UseVoiceRecorderOptions {
   onTranscriptionComplete?: (transcript: string) => void;
@@ -30,6 +30,7 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
   
   // Check browser support for MediaRecorder and audio types
   const [browserSupport, setBrowserSupport] = useState({
+    mediaDevices: false,
     mediaRecorder: false,
     webmSupport: false,
     mp4Support: false
@@ -37,11 +38,15 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
   
   useEffect(() => {
     // Check if we're in a secure context
-    setIsSecureContext(
-      window.isSecureContext || 
+    const secureContext = window.isSecureContext || 
       window.location.hostname === 'localhost' || 
-      window.location.hostname === '127.0.0.1'
-    );
+      window.location.hostname === '127.0.0.1';
+    
+    setIsSecureContext(secureContext);
+    console.log('Is secure context:', secureContext);
+    
+    // Check browser support for MediaDevices
+    const hasMediaDevices = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     
     // Check browser support for MediaRecorder
     const hasMediaRecorder = typeof MediaRecorder !== 'undefined';
@@ -51,16 +56,18 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
     const hasMp4Support = hasMediaRecorder && MediaRecorder.isTypeSupported('audio/mp4');
     
     setBrowserSupport({
+      mediaDevices: hasMediaDevices,
       mediaRecorder: hasMediaRecorder,
       webmSupport: hasWebmSupport,
       mp4Support: hasMp4Support
     });
     
     console.log('Voice recorder browser support:', {
+      mediaDevices: hasMediaDevices,
       mediaRecorder: hasMediaRecorder,
       webmSupport: hasWebmSupport,
       mp4Support: hasMp4Support,
-      isSecureContext: isSecureContext
+      isSecureContext: secureContext
     });
   }, []);
   
@@ -68,37 +75,47 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
   const getPreferredMimeType = (): string => {
     if (browserSupport.webmSupport) return 'audio/webm';
     if (browserSupport.mp4Support) return 'audio/mp4';
-    return 'audio/webm'; // Default, may not work
+    return 'audio/webm'; // Default fallback
   };
   
   const startRecording = async () => {
+    console.log('Attempting to start recording...');
+    
     // Reset state
     setState(prev => ({ ...prev, error: null, transcript: null }));
     audioChunksRef.current = [];
     
     // Security checks
     if (!isSecureContext) {
-      const securityError = 'Voice recording requires a secure context (HTTPS or localhost)';
+      const securityError = 'Gravação de voz requer um contexto seguro (HTTPS ou localhost)';
       console.error(securityError);
       setState(prev => ({ ...prev, error: securityError }));
-      toast({ variant: "destructive", title: "Security Error", description: securityError });
+      toast({ variant: "destructive", title: "Erro de Segurança", description: securityError });
       return;
     }
     
     // Browser support checks
+    if (!browserSupport.mediaDevices) {
+      const deviceError = 'Seu navegador não suporta acesso ao microfone';
+      console.error(deviceError);
+      setState(prev => ({ ...prev, error: deviceError }));
+      toast({ variant: "destructive", title: "Erro de Compatibilidade", description: deviceError });
+      return;
+    }
+    
     if (!browserSupport.mediaRecorder) {
-      const supportError = 'Your browser does not support voice recording';
+      const supportError = 'Seu navegador não suporta gravação de voz';
       console.error(supportError);
       setState(prev => ({ ...prev, error: supportError }));
-      toast({ variant: "destructive", title: "Browser Error", description: supportError });
+      toast({ variant: "destructive", title: "Erro de Compatibilidade", description: supportError });
       return;
     }
     
     if (!browserSupport.webmSupport && !browserSupport.mp4Support) {
-      const formatError = 'Your browser does not support any compatible audio format';
+      const formatError = 'Seu navegador não suporta nenhum formato de áudio compatível';
       console.error(formatError);
       setState(prev => ({ ...prev, error: formatError }));
-      toast({ variant: "destructive", title: "Format Error", description: formatError });
+      toast({ variant: "destructive", title: "Erro de Formato", description: formatError });
       return;
     }
     
@@ -111,25 +128,25 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
       console.log(`Using MIME type: ${mimeType}`);
       
       // Use explicit options object with correct mimeType
-      const mediaRecorder = new MediaRecorder(stream, { 
+      const recorder = new MediaRecorder(stream, { 
         mimeType: mimeType,
         audioBitsPerSecond: 128000 // Set reasonable bitrate
       });
-      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorderRef.current = recorder;
       
-      mediaRecorder.ondataavailable = (e) => {
+      recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
           audioChunksRef.current.push(e.data);
           console.log(`Recorded audio chunk: ${e.data.size} bytes, type: ${e.data.type}`);
         }
       };
       
-      mediaRecorder.onstart = () => {
+      recorder.onstart = () => {
         console.log('Recording started');
         setState(prev => ({ ...prev, isRecording: true }));
       };
       
-      mediaRecorder.onstop = async () => {
+      recorder.onstop = async () => {
         console.log('Recording stopped');
         setState(prev => ({ ...prev, isRecording: false }));
         
@@ -139,11 +156,11 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
         // Make sure we have audio chunks
         if (audioChunksRef.current.length === 0) {
           console.error('No audio chunks recorded');
-          setState(prev => ({ ...prev, error: 'No audio recorded. Please try again.' }));
+          setState(prev => ({ ...prev, error: 'Nenhum áudio gravado. Por favor, tente novamente.' }));
           toast({ 
             variant: "destructive", 
-            title: "Recording Error", 
-            description: "No audio was recorded. Please try again." 
+            title: "Erro na Gravação", 
+            description: "Nenhum áudio foi gravado. Por favor, tente novamente." 
           });
           return;
         }
@@ -160,10 +177,10 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
         
         // Validate audio size
         if (audioBlob.size < 100) { // Arbitrary minimum size check
-          const sizeError = 'Recorded audio is too short or empty';
+          const sizeError = 'Áudio gravado é muito curto ou vazio';
           console.error(sizeError);
           setState(prev => ({ ...prev, error: sizeError }));
-          toast({ variant: "destructive", title: "Recording Error", description: sizeError });
+          toast({ variant: "destructive", title: "Erro na Gravação", description: sizeError });
           return;
         }
         
@@ -172,29 +189,29 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
       };
       
       // Setup data collection - request data every 1 second to ensure we get chunks
-      mediaRecorder.start(1000);
+      recorder.start(1000);
       console.log('Recording started with timeslice of 1000ms');
       
     } catch (error: any) {
       console.error('Recording error:', error);
       
-      let errorMessage = 'Failed to access microphone';
+      let errorMessage = 'Falha ao acessar o microfone';
       
       // Handle specific permission errors
       if (error.name === 'NotAllowedError') {
-        errorMessage = 'Microphone access was denied. Please allow microphone access and try again.';
+        errorMessage = 'Acesso ao microfone foi negado. Por favor, permita o acesso e tente novamente.';
       } else if (error.name === 'NotFoundError') {
-        errorMessage = 'No microphone detected. Please connect a microphone and try again.';
+        errorMessage = 'Nenhum microfone detectado. Por favor, conecte um microfone e tente novamente.';
       } else if (error.name === 'NotReadableError') {
-        errorMessage = 'Microphone is already in use by another application.';
+        errorMessage = 'O microfone já está em uso por outro aplicativo.';
       } else if (error.name === 'SecurityError') {
-        errorMessage = 'Voice recording requires a secure context (HTTPS).';
+        errorMessage = 'Gravação de voz requer um contexto seguro (HTTPS).';
       } else {
-        errorMessage = `Microphone error: ${error.message || 'Unknown error'}`;
+        errorMessage = `Erro de microfone: ${error.message || 'Erro desconhecido'}`;
       }
       
       setState(prev => ({ ...prev, error: errorMessage }));
-      toast({ variant: "destructive", title: "Microphone Error", description: errorMessage });
+      toast({ variant: "destructive", title: "Erro de Microfone", description: errorMessage });
     }
   };
   
@@ -215,7 +232,7 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
         isRecording: false, 
         transcript: null 
       }));
-      toast({ title: "Recording Cancelled" });
+      toast({ title: "Gravação Cancelada" });
     }
   };
   
@@ -225,13 +242,13 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
     
     try {
       // Import the transcribeAudio function from the recipes hook
-      const { transcribeAudio: transcribe } = await import('../hooks/useRecipes');
+      const { transcribeAudio: transcribe } = await import('./useRecipes');
       
       const transcript = await transcribe(audioBlob);
       console.log('Transcription succeeded:', transcript);
       
       if (!transcript) {
-        throw new Error('No transcription returned');
+        throw new Error('Nenhuma transcrição retornada');
       }
       
       setState(prev => ({ 
@@ -241,8 +258,6 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
         error: null
       }));
       
-      toast({ title: "Transcrição Concluída", description: "Sua voz foi convertida em texto" });
-      
       // Call the completion callback if provided
       if (options?.onTranscriptionComplete) {
         options.onTranscriptionComplete(transcript);
@@ -250,19 +265,13 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
       
     } catch (error: any) {
       console.error('Transcription error:', error);
-      const errorMessage = error.message || 'Failed to transcribe audio';
+      const errorMessage = error.message || 'Falha ao transcrever áudio';
       
       setState(prev => ({ 
         ...prev, 
         isTranscribing: false,
         error: errorMessage
       }));
-      
-      toast({ 
-        variant: "destructive", 
-        title: "Falha na Transcrição", 
-        description: errorMessage
-      });
       
       // Call the error callback if provided
       if (options?.onTranscriptionError) {
@@ -286,6 +295,7 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
     stopRecording,
     cancelRecording,
     resetState,
-    isSupported: browserSupport.mediaRecorder && (browserSupport.webmSupport || browserSupport.mp4Support) && isSecureContext
+    isSupported: browserSupport.mediaDevices && browserSupport.mediaRecorder && 
+                (browserSupport.webmSupport || browserSupport.mp4Support) && isSecureContext
   };
 };

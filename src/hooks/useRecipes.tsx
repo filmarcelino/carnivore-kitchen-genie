@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
 import { Recipe } from '../types';
+import { toast } from './use-toast';
 
 // Convert Supabase recipe to app recipe format
 const convertSupabaseRecipe = (supabaseRecipe: any): Recipe => {
@@ -105,9 +106,18 @@ export function useRecipes() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['recipes'] });
+      toast({
+        title: "Receita criada",
+        description: "Sua receita foi criada com sucesso!"
+      });
     },
     onError: (err: Error) => {
       setError(err.message);
+      toast({
+        variant: "destructive",
+        title: "Erro ao criar receita",
+        description: err.message || "Ocorreu um erro ao criar a receita"
+      });
     }
   });
 
@@ -127,9 +137,18 @@ export function useRecipes() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['recipes'] });
       queryClient.invalidateQueries({ queryKey: ['recipe', data.id] });
+      toast({
+        title: "Receita atualizada",
+        description: "Sua receita foi atualizada com sucesso!"
+      });
     },
     onError: (err: Error) => {
       setError(err.message);
+      toast({
+        variant: "destructive",
+        title: "Erro ao atualizar receita",
+        description: err.message || "Ocorreu um erro ao atualizar a receita"
+      });
     }
   });
 
@@ -146,9 +165,18 @@ export function useRecipes() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['recipes'] });
+      toast({
+        title: "Receita excluída",
+        description: "Sua receita foi excluída com sucesso!"
+      });
     },
     onError: (err: Error) => {
       setError(err.message);
+      toast({
+        variant: "destructive",
+        title: "Erro ao excluir receita",
+        description: err.message || "Ocorreu um erro ao excluir a receita"
+      });
     }
   });
 
@@ -171,12 +199,12 @@ export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
   // Validate the audio blob
   if (!audioBlob || audioBlob.size === 0) {
     console.error('Invalid audio recording: Empty file');
-    throw new Error('Invalid audio recording: Empty or corrupt file');
+    throw new Error('Gravação inválida: Arquivo vazio ou corrompido');
   }
   
   if (audioBlob.size < 100) {
     console.error('Audio file too small:', audioBlob.size, 'bytes');
-    throw new Error('Recording is too short. Please speak for longer.');
+    throw new Error('Gravação muito curta. Por favor, fale por mais tempo.');
   }
   
   // Make sure we're using a format that OpenAI's API accepts
@@ -185,7 +213,7 @@ export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
   
   if (!mimeType.match(validFormats)) {
     console.error(`Unsupported audio format: ${mimeType}`);
-    throw new Error(`Unsupported audio format: ${mimeType}. Please use WAV, MP3, OGG, M4A, MP4, MPEG, or WEBM.`);
+    throw new Error(`Formato de áudio não suportado: ${mimeType}. Use WAV, MP3, OGG, M4A, MP4, MPEG ou WEBM.`);
   }
   
   console.log(`Preparing audio for transcription: type=${mimeType}, size=${audioBlob.size} bytes`);
@@ -215,7 +243,7 @@ export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
       headers: {
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
         'apikey': SUPABASE_ANON_KEY,
-        // Remove the manual Content-Type header to let browser set it properly with boundary
+        // Content-Type is NOT set manually - let the browser handle it
       },
       body: formData,
     });
@@ -223,10 +251,10 @@ export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
     console.log(`Response status: ${response.status}`);
     
     if (!response.ok) {
-      let errorMessage = `Transcription error: ${response.statusText}`;
+      let errorMessage = `Erro de transcrição: ${response.statusText}`;
       try {
         const errorData = await response.json();
-        errorMessage = `Transcription error: ${errorData.error || response.statusText}`;
+        errorMessage = `Erro de transcrição: ${errorData.error || response.statusText}`;
         console.error('Transcription error response:', errorData);
       } catch (parseError) {
         console.error('Error parsing error response:', parseError);
@@ -237,9 +265,9 @@ export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
     const data = await response.json();
     console.log('Transcription success response:', data);
     
-    if (!data.text) {
+    if (!data.text || data.text.trim() === '') {
       console.error('No transcription text returned');
-      throw new Error('No transcription text returned from API');
+      throw new Error('Nenhum texto foi identificado na gravação. Por favor, fale mais claramente.');
     }
     
     // Success! Return the transcript
@@ -247,28 +275,45 @@ export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
     return data.text;
   } catch (error: any) {
     console.error('Error during transcription request:', error);
-    throw new Error(`Transcription failed: ${error.message || 'Unknown error'}`);
+    throw new Error(`Falha na transcrição: ${error.message || 'Erro desconhecido'}`);
   }
 };
 
 // Function to generate recipe image
 export const generateRecipeImage = async (recipeName: string): Promise<string> => {
   console.log('Generating recipe image for:', recipeName);
-  const response = await fetch('https://nuvujqidhjnbosfcwahw.supabase.co/functions/v1/generate-image', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ prompt: recipeName }),
-  });
+  
+  try {
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51dnVqcWlkaGpuYm9zZmN3YWh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUwODUyOTAsImV4cCI6MjA2MDY2MTI5MH0.LJX5gVpgj34euLc-mXkoPVVZK7eG9k_LBzCED8jN9Ls";
+    
+    const response = await fetch('https://nuvujqidhjnbosfcwahw.supabase.co/functions/v1/generate-image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ prompt: recipeName }),
+    });
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(`Image generation error: ${errorData.error || response.statusText}`);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Erro na geração de imagem: ${errorData.error || response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.imageUrl;
+  } catch (error: any) {
+    console.error('Image generation error:', error);
+    toast({
+      variant: "destructive",
+      title: "Erro na geração de imagem",
+      description: error.message || "Não foi possível gerar a imagem da receita"
+    });
+    
+    // Return empty string on error so app can continue without image
+    return '';
   }
-
-  const data = await response.json();
-  return data.imageUrl;
 };
 
 // Function to generate recipe from ingredients
@@ -279,58 +324,89 @@ export const generateRecipe = async (ingredients: string, dietType: 'strict' | '
   // Get the anon key for authentication
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51dnVqcWlkaGpuYm9zZmN3YWh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUwODUyOTAsImV4cCI6MjA2MDY2MTI5MH0.LJX5gVpgj34euLc-mXkoPVVZK7eG9k_LBzCED8jN9Ls";
   
-  const response = await fetch('https://nuvujqidhjnbosfcwahw.supabase.co/functions/v1/generate-recipe', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-      'apikey': SUPABASE_ANON_KEY,
-    },
-    body: JSON.stringify({ ingredients, dietType }),
-  });
+  try {
+    const response = await fetch('https://nuvujqidhjnbosfcwahw.supabase.co/functions/v1/generate-recipe', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ ingredients, dietType }),
+    });
 
-  if (!response.ok) {
-    let errorMessage = 'Recipe generation failed';
-    try {
-      const errorData = await response.json();
-      console.error('Recipe generation error response:', errorData);
-      errorMessage = `Recipe generation error: ${errorData.error || response.statusText}`;
-    } catch (parseError) {
-      console.error('Error parsing error response:', parseError);
+    if (!response.ok) {
+      let errorMessage = 'Falha na geração da receita';
+      try {
+        const errorData = await response.json();
+        console.error('Recipe generation error response:', errorData);
+        errorMessage = `Erro na geração da receita: ${errorData.error || response.statusText}`;
+      } catch (parseError) {
+        console.error('Error parsing error response:', parseError);
+      }
+      throw new Error(errorMessage);
     }
-    throw new Error(errorMessage);
-  }
 
-  const data = await response.json();
-  return {
-    id: '',
-    name: data.name,
-    ingredients: data.ingredients,
-    instructions: data.instructions,
-    dietType: data.dietType,
-    category: data.category,
-    prepTime: data.prepTime,
-    macros: data.macros,
-    cookingMethod: data.cookingMethod || 'pan',
-    image: '' // We'll set this later if needed
-  };
+    const data = await response.json();
+    toast({
+      title: "Receita gerada",
+      description: `"${data.name}" foi criada com sucesso!`
+    });
+    
+    return {
+      id: '',
+      name: data.name,
+      ingredients: data.ingredients,
+      instructions: data.instructions,
+      dietType: data.dietType,
+      category: data.category,
+      prepTime: data.prepTime,
+      macros: data.macros,
+      cookingMethod: data.cookingMethod || 'pan',
+      image: '' // We'll set this later if needed
+    };
+  } catch (error: any) {
+    console.error('Recipe generation error:', error);
+    toast({
+      variant: "destructive",
+      title: "Erro na geração de receita",
+      description: error.message || "Não foi possível gerar a receita"
+    });
+    throw error;
+  }
 };
 
 // Function to process image for OCR
 export const processImageOCR = async (imageUrl: string): Promise<any> => {
-  const response = await fetch('https://nuvujqidhjnbosfcwahw.supabase.co/functions/v1/process-image-ocr', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ imageUrl }),
-  });
+  console.log('Processing image for OCR:', imageUrl);
+  
+  try {
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51dnVqcWlkaGpuYm9zZmN3YWh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUwODUyOTAsImV4cCI6MjA2MDY2MTI5MH0.LJX5gVpgj34euLc-mXkoPVVZK7eG9k_LBzCED8jN9Ls";
+    
+    const response = await fetch('https://nuvujqidhjnbosfcwahw.supabase.co/functions/v1/process-image-ocr', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ imageUrl }),
+    });
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(`OCR error: ${errorData.error || response.statusText}`);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Erro de OCR: ${errorData.error || response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error: any) {
+    console.error('OCR processing error:', error);
+    toast({
+      variant: "destructive",
+      title: "Erro no processamento OCR",
+      description: error.message || "Não foi possível processar a imagem"
+    });
+    throw error;
   }
-
-  const data = await response.json();
-  return data;
 };
