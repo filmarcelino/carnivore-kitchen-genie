@@ -87,35 +87,35 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
     
     // Security checks
     if (!isSecureContext) {
-      const securityError = 'Gravação de voz requer um contexto seguro (HTTPS ou localhost)';
+      const securityError = 'Voice recording requires a secure context (HTTPS or localhost)';
       console.error(securityError);
       setState(prev => ({ ...prev, error: securityError }));
-      toast({ variant: "destructive", title: "Erro de Segurança", description: securityError });
+      toast({ variant: "destructive", title: "Security Error", description: securityError });
       return;
     }
     
     // Browser support checks
     if (!browserSupport.mediaDevices) {
-      const deviceError = 'Seu navegador não suporta acesso ao microfone';
+      const deviceError = 'Your browser doesn\'t support microphone access';
       console.error(deviceError);
       setState(prev => ({ ...prev, error: deviceError }));
-      toast({ variant: "destructive", title: "Erro de Compatibilidade", description: deviceError });
+      toast({ variant: "destructive", title: "Compatibility Error", description: deviceError });
       return;
     }
     
     if (!browserSupport.mediaRecorder) {
-      const supportError = 'Seu navegador não suporta gravação de voz';
+      const supportError = 'Your browser doesn\'t support voice recording';
       console.error(supportError);
       setState(prev => ({ ...prev, error: supportError }));
-      toast({ variant: "destructive", title: "Erro de Compatibilidade", description: supportError });
+      toast({ variant: "destructive", title: "Compatibility Error", description: supportError });
       return;
     }
     
     if (!browserSupport.webmSupport && !browserSupport.mp4Support) {
-      const formatError = 'Seu navegador não suporta nenhum formato de áudio compatível';
+      const formatError = 'Your browser doesn\'t support any compatible audio format';
       console.error(formatError);
       setState(prev => ({ ...prev, error: formatError }));
-      toast({ variant: "destructive", title: "Erro de Formato", description: formatError });
+      toast({ variant: "destructive", title: "Format Error", description: formatError });
       return;
     }
     
@@ -156,11 +156,11 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
         // Make sure we have audio chunks
         if (audioChunksRef.current.length === 0) {
           console.error('No audio chunks recorded');
-          setState(prev => ({ ...prev, error: 'Nenhum áudio gravado. Por favor, tente novamente.' }));
+          setState(prev => ({ ...prev, error: 'No audio recorded. Please try again.' }));
           toast({ 
             variant: "destructive", 
-            title: "Erro na Gravação", 
-            description: "Nenhum áudio foi gravado. Por favor, tente novamente." 
+            title: "Recording Error", 
+            description: "No audio was recorded. Please try again." 
           });
           return;
         }
@@ -177,10 +177,10 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
         
         // Validate audio size
         if (audioBlob.size < 100) { // Arbitrary minimum size check
-          const sizeError = 'Áudio gravado é muito curto ou vazio';
+          const sizeError = 'Recorded audio is too short or empty';
           console.error(sizeError);
           setState(prev => ({ ...prev, error: sizeError }));
-          toast({ variant: "destructive", title: "Erro na Gravação", description: sizeError });
+          toast({ variant: "destructive", title: "Recording Error", description: sizeError });
           return;
         }
         
@@ -195,23 +195,23 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
     } catch (error: any) {
       console.error('Recording error:', error);
       
-      let errorMessage = 'Falha ao acessar o microfone';
+      let errorMessage = 'Failed to access microphone';
       
       // Handle specific permission errors
       if (error.name === 'NotAllowedError') {
-        errorMessage = 'Acesso ao microfone foi negado. Por favor, permita o acesso e tente novamente.';
+        errorMessage = 'Microphone access was denied. Please allow access and try again.';
       } else if (error.name === 'NotFoundError') {
-        errorMessage = 'Nenhum microfone detectado. Por favor, conecte um microfone e tente novamente.';
+        errorMessage = 'No microphone detected. Please connect a microphone and try again.';
       } else if (error.name === 'NotReadableError') {
-        errorMessage = 'O microfone já está em uso por outro aplicativo.';
+        errorMessage = 'The microphone is already in use by another application.';
       } else if (error.name === 'SecurityError') {
-        errorMessage = 'Gravação de voz requer um contexto seguro (HTTPS).';
+        errorMessage = 'Voice recording requires a secure context (HTTPS).';
       } else {
-        errorMessage = `Erro de microfone: ${error.message || 'Erro desconhecido'}`;
+        errorMessage = `Microphone error: ${error.message || 'Unknown error'}`;
       }
       
       setState(prev => ({ ...prev, error: errorMessage }));
-      toast({ variant: "destructive", title: "Erro de Microfone", description: errorMessage });
+      toast({ variant: "destructive", title: "Microphone Error", description: errorMessage });
     }
   };
   
@@ -232,7 +232,7 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
         isRecording: false, 
         transcript: null 
       }));
-      toast({ title: "Gravação Cancelada" });
+      toast({ title: "Recording Cancelled" });
     }
   };
   
@@ -248,7 +248,7 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
       console.log('Transcription succeeded:', transcript);
       
       if (!transcript) {
-        throw new Error('Nenhuma transcrição retornada');
+        throw new Error('No transcription returned');
       }
       
       setState(prev => ({ 
@@ -265,7 +265,7 @@ export const useVoiceRecorder = (options?: UseVoiceRecorderOptions) => {
       
     } catch (error: any) {
       console.error('Transcription error:', error);
-      const errorMessage = error.message || 'Falha ao transcrever áudio';
+      const errorMessage = error.message || 'Failed to transcribe audio';
       
       setState(prev => ({ 
         ...prev, 

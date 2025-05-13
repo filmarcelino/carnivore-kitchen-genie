@@ -97,7 +97,7 @@ serve(async (req) => {
     
     openaiFormData.append('file', processedAudioFile);
     openaiFormData.append('model', 'whisper-1');
-    openaiFormData.append('language', 'pt'); // Set language to Portuguese
+    openaiFormData.append('language', 'en'); // Changed from 'pt' to 'en' for English
 
     console.log('Sending request to OpenAI');
     console.log('Audio being sent:', {
