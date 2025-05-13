@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
@@ -275,17 +276,29 @@ export const generateRecipe = async (ingredients: string, dietType: 'strict' | '
   console.log('Generating recipe with ingredients:', ingredients);
   console.log('Diet type:', dietType);
   
+  // Get the anon key for authentication
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51dnVqcWlkaGpuYm9zZmN3YWh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUwODUyOTAsImV4cCI6MjA2MDY2MTI5MH0.LJX5gVpgj34euLc-mXkoPVVZK7eG9k_LBzCED8jN9Ls";
+  
   const response = await fetch('https://nuvujqidhjnbosfcwahw.supabase.co/functions/v1/generate-recipe', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'apikey': SUPABASE_ANON_KEY,
     },
     body: JSON.stringify({ ingredients, dietType }),
   });
 
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(`Recipe generation error: ${errorData.error || response.statusText}`);
+    let errorMessage = 'Recipe generation failed';
+    try {
+      const errorData = await response.json();
+      console.error('Recipe generation error response:', errorData);
+      errorMessage = `Recipe generation error: ${errorData.error || response.statusText}`;
+    } catch (parseError) {
+      console.error('Error parsing error response:', parseError);
+    }
+    throw new Error(errorMessage);
   }
 
   const data = await response.json();
@@ -298,7 +311,8 @@ export const generateRecipe = async (ingredients: string, dietType: 'strict' | '
     category: data.category,
     prepTime: data.prepTime,
     macros: data.macros,
-    cookingMethod: data.cookingMethod || 'pan'
+    cookingMethod: data.cookingMethod || 'pan',
+    image: '' // We'll set this later if needed
   };
 };
 

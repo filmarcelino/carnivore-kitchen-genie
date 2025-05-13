@@ -2,7 +2,8 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+// Check for both possible API key environment variable names
+const openAIApiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('OPEN_API_KEY');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -16,7 +17,15 @@ serve(async (req) => {
   }
 
   try {
+    // Log the API key status (not the actual key)
+    console.log(`OpenAI API key available: ${openAIApiKey ? 'Yes' : 'No'}`);
+    
+    if (!openAIApiKey) {
+      throw new Error('OpenAI API key not found. Please check OPENAI_API_KEY or OPEN_API_KEY environment variable.');
+    }
+
     const { ingredients, dietType } = await req.json();
+    console.log(`Received request with ingredients: ${ingredients ? 'Yes' : 'No'}, dietType: ${dietType || 'Not specified'}`);
 
     if (!ingredients) {
       throw new Error('Ingredients are required');
@@ -40,6 +49,7 @@ serve(async (req) => {
       }
     }`;
 
+    console.log("Sending request to OpenAI API...");
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -58,15 +68,24 @@ serve(async (req) => {
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(`OpenAI API error: ${JSON.stringify(errorData)}`);
+      console.error("OpenAI API error:", JSON.stringify(errorData));
+      throw new Error(`OpenAI API error: ${errorData.error?.message || JSON.stringify(errorData)}`);
     }
 
     const data = await response.json();
-    const recipeJson = JSON.parse(data.choices[0].message.content);
-
-    return new Response(JSON.stringify(recipeJson), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    console.log("Received response from OpenAI API");
+    
+    try {
+      const recipeJson = JSON.parse(data.choices[0].message.content);
+      console.log("Successfully parsed recipe JSON");
+      
+      return new Response(JSON.stringify(recipeJson), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    } catch (parseError) {
+      console.error("Error parsing recipe JSON:", parseError);
+      throw new Error(`Failed to parse recipe data: ${parseError.message}`);
+    }
   } catch (error) {
     console.error('Error in generate-recipe function:', error);
     return new Response(JSON.stringify({ error: error.message }), {
