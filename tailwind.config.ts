@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -61,6 +62,16 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
+				},
+				// Custom carnivore theme colors
+				carnivore: {
+					background: '#221F1E',
+					foreground: '#F2E8DD',
+					primary: '#E25D3C',
+					secondary: '#D5B595',
+					accent: '#BF5A3F',
+					muted: '#362F2D',
+					card: '#2A2524',
 				}
 			},
 			borderRadius: {
@@ -89,7 +100,10 @@ export default {
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
 				'accordion-up': 'accordion-up 0.2s ease-out'
-			}
+			},
+			backgroundImage: {
+        'leather-texture': "url('/leather-texture.png')",
+      },
 		}
 	},
 	plugins: [require("tailwindcss-animate")],
