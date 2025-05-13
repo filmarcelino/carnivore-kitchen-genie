@@ -2,7 +2,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+const openAIApiKey = Deno.env.get('OPEN_API_KEY') || Deno.env.get('OPENAI_API_KEY');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -22,6 +22,12 @@ serve(async (req) => {
       throw new Error('Prompt is required');
     }
 
+    if (!openAIApiKey) {
+      throw new Error('OpenAI API key is not configured');
+    }
+
+    console.log('Generating image for prompt:', prompt);
+
     const enhancedPrompt = `A beautiful, appetizing photo of ${prompt}. Professional food photography, detailed, high resolution.`;
 
     const response = await fetch('https://api.openai.com/v1/images/generations', {
@@ -40,10 +46,13 @@ serve(async (req) => {
 
     if (!response.ok) {
       const errorData = await response.json();
+      console.error('OpenAI API error:', errorData);
       throw new Error(`OpenAI API error: ${JSON.stringify(errorData)}`);
     }
 
     const data = await response.json();
+    console.log('Image generated successfully');
+    
     return new Response(JSON.stringify({ imageUrl: data.data[0].url }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
