@@ -286,6 +286,8 @@ export const generateRecipeImage = async (recipeName: string): Promise<string> =
   try {
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51dnVqcWlkaGpuYm9zZmN3YWh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUwODUyOTAsImV4cCI6MjA2MDY2MTI5MH0.LJX5gVpgj34euLc-mXkoPVVZK7eG9k_LBzCED8jN9Ls";
     
+    console.log('Making request to generate-image function');
+    
     const response = await fetch('https://nuvujqidhjnbosfcwahw.supabase.co/functions/v1/generate-image', {
       method: 'POST',
       headers: {
@@ -296,19 +298,28 @@ export const generateRecipeImage = async (recipeName: string): Promise<string> =
       body: JSON.stringify({ prompt: recipeName }),
     });
 
+    console.log('Response status:', response.status);
+    
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(`Erro na geração de imagem: ${errorData.error || response.statusText}`);
+      console.error('Error response:', errorData);
+      throw new Error(`Error generating image: ${errorData.error || response.statusText}`);
     }
 
     const data = await response.json();
+    console.log('Image generation response:', data);
+    
+    if (!data.imageUrl) {
+      throw new Error('No image URL returned from API');
+    }
+    
     return data.imageUrl;
   } catch (error: any) {
     console.error('Image generation error:', error);
     toast({
       variant: "destructive",
-      title: "Erro na geração de imagem",
-      description: error.message || "Não foi possível gerar a imagem da receita"
+      title: "Error generating image",
+      description: error.message || "Could not generate the recipe image"
     });
     
     // Return empty string on error so app can continue without image

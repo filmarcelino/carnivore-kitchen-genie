@@ -99,12 +99,20 @@ const RecipeForm: React.FC<RecipeFormProps> = ({ onSubmit, initialData }) => {
 
     setIsGeneratingImage(true);
     try {
+      console.log('Starting image generation for:', name);
       const imageUrl = await generateRecipeImage(name);
-      setImage(imageUrl);
-      toast.success('Recipe image generated!');
+      
+      if (imageUrl) {
+        console.log('Image URL received:', imageUrl);
+        setImage(imageUrl);
+        toast.success('Recipe image generated!');
+      } else {
+        console.error('No image URL returned');
+        toast.error('Failed to generate image: No image URL returned');
+      }
     } catch (error) {
       console.error('Image generation error:', error);
-      toast.error('Failed to generate image');
+      toast.error(`Failed to generate image: ${error.message || 'Unknown error'}`);
     } finally {
       setIsGeneratingImage(false);
     }
